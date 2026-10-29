@@ -15,6 +15,28 @@ env:
   VERSION: 1.0.${{ github.run_number }}
 
 jobs:
+  # FAST online update: publishes just the HTML file as a release (takes about
+  # a minute). Installed apps download this file by themselves, so you do not
+  # have to wait for the Windows/Mac installers to finish building.
+  publish-html:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare update file
+        run: |
+          if [ ! -f "$HTML_FILE" ]; then
+            echo "::error::$HTML_FILE was not found in the root of the repo."
+            exit 1
+          fi
+          cp "$HTML_FILE" ecr-app.html
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: GNHS ECR v${{ env.VERSION }}
+          files: ecr-app.html
+
   build:
     strategy:
       fail-fast: false
@@ -30,7 +52,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
 
-      - name: Package the app (Electron wrapper around the HTML file)
+      - name: Package the app (Electron wrapper around the HTML file, with update dialog)
         shell: bash
         run: |
           if [ ! -f "$HTML_FILE" ]; then
@@ -54,7 +76,7 @@ jobs:
               "appId": "com.gnhs.ecr",
               "productName": "GNHS ECR",
               "directories": { "buildResources": "build" },
-              "files": ["main.js", "www/**/*"],
+              "files": ["main.js", "updater-preload.js", "updater.html", "www/**/*"],
               "win": {
                 "target": ["nsis", "portable"]
               },
@@ -77,22 +99,350 @@ jobs:
           EOF
           sed -i.bak "s/__VERSION__/$VERSION/" ecr/package.json && rm ecr/package.json.bak
 
+          # ---------- the update dialog window ----------
+          cat > ecr/updater-preload.js <<'EOF'
+          const { contextBridge, ipcRenderer } = require('electron');
+          contextBridge.exposeInMainWorld('updater', {
+            onState: (cb) => ipcRenderer.on('state', (_e, s) => cb(s)),
+            choose: (id) => ipcRenderer.send('choice', id)
+          });
+          EOF
+
+          cat > ecr/updater.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <title>GNHS ECR</title>
+          <style>
+            :root { color-scheme: light dark; --card:#16254a; --fg:#eef2ff; --muted:#9db0d8; --accent:#4f8cff; }
+            @media (prefers-color-scheme: light) { :root { --card:#ffffff; --fg:#14213d; --muted:#5b6b8c; } }
+            * { box-sizing: border-box; }
+            html, body { height: 100%; margin: 0; }
+            body { background: var(--card); color: var(--fg); display: flex; align-items: center; justify-content: center;
+                   padding: 24px; text-align: center; overflow: hidden; user-select: none;
+                   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+            .wrap { width: 100%; }
+            .icon { position: relative; width: 68px; height: 68px; margin: 0 auto 14px; border-radius: 50%;
+                    display: flex; align-items: center; justify-content: center; background: rgba(79,140,255,.16); }
+            .icon > * { display: none; }
+            body[data-mode="search"] .spin { display: block; }
+            body[data-mode="download"] .down { display: block; }
+            body[data-mode="ok"] .okmark { display: block; }
+            body[data-mode="warn"] .warnmark { display: block; }
+            body[data-mode="ok"] .icon { background: rgba(60,207,145,.16); }
+            body[data-mode="warn"] .icon { background: rgba(255,176,64,.18); }
+            .spin { width: 34px; height: 34px; border: 4px solid rgba(128,140,170,.35); border-top-color: var(--accent);
+                    border-radius: 50%; animation: spin .9s linear infinite; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .down { animation: bob 1.1s ease-in-out infinite; }
+            @keyframes bob { 0%,100% { transform: translateY(-2px); } 50% { transform: translateY(3px); } }
+            .icon svg { width: 34px; height: 34px; }
+            .title { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+            #msg { font-size: 16px; font-weight: 600; min-height: 24px; word-break: break-word; }
+            #track { display: none; height: 8px; margin-top: 16px; border-radius: 99px; background: rgba(128,140,170,.28); overflow: hidden; }
+            #fill { height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg,#4f8cff,#7db0ff); transition: width .2s ease; }
+            #pct { display: none; margin-top: 8px; font-size: 13px; color: var(--muted); }
+            #btns { margin-top: 18px; }
+            #btns button { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 0; border-radius: 12px;
+                           background: var(--accent); color: #fff; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+            #btns button.secondary { background: transparent; color: var(--muted); font-weight: 400; }
+          </style>
+          </head>
+          <body data-mode="search">
+          <div class="wrap">
+            <div class="icon">
+              <div class="spin"></div>
+              <svg class="down" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+              <svg class="okmark" viewBox="0 0 24 24" fill="none" stroke="#3ccf91" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+              <svg class="warnmark" viewBox="0 0 24 24" fill="none" stroke="#ffb040" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v8"/><path d="M12 18.2v.1"/></svg>
+            </div>
+            <div class="title">GNHS ECR</div>
+            <div id="msg"></div>
+            <div id="track"><div id="fill"></div></div>
+            <div id="pct"></div>
+            <div id="btns"></div>
+          </div>
+          <script>
+            const $ = (id) => document.getElementById(id);
+            window.updater.onState((s) => {
+              document.body.dataset.mode = s.mode || 'search';
+              $('msg').textContent = s.text || '';
+              if (s.percent != null) {
+                $('track').style.display = 'block';
+                $('pct').style.display = 'block';
+                $('fill').style.width = s.percent + '%';
+                $('pct').textContent = s.percent + '%';
+              } else {
+                $('track').style.display = 'none';
+                $('pct').style.display = 'none';
+              }
+              $('btns').innerHTML = '';
+              (s.buttons || []).forEach((b) => {
+                const el = document.createElement('button');
+                el.textContent = b.label;
+                if (b.secondary) el.className = 'secondary';
+                el.onclick = () => window.updater.choose(b.id);
+                $('btns').appendChild(el);
+              });
+            });
+          </script>
+          </body>
+          </html>
+          EOF
+
+          # ---------- the app ----------
           cat > ecr/main.js <<'EOF'
-          const { app, BrowserWindow, Menu } = require('electron');
+          const { app, BrowserWindow, Menu, ipcMain } = require('electron');
           const path = require('path');
+          const fs = require('fs');
+
+          const REPO = 'juliuscelio-del/gnhs-ecr';
+          const ASSET = 'ecr-app.html';
+
+          // ---------- timing (milliseconds) ----------
+          const SEARCH_MS = 10000;        // the "searching" dialog stays up this long
+          const NO_UPDATE_MS = 5000;      // the "no update" dialog stays up this long
+          const MIN_DOWNLOAD_MS = 2500;   // the "downloading" dialog stays up at least this long
+
+          // ---------- all dialog texts in one place ----------
+          const T = {
+            searching: 'mangita sa tag bag.ong update ane nga app. ug naa ba',
+            none: 'pwed nane sija gamiton kai updated pa neh',
+            downloading: 'downloadon sa ne nato kadali ha ag updates',
+            applying: 'Human na ang download. I-reload na nato...',
+            ready: 'Human na ma-download ang bag.ong update.',
+            reloadNow: 'I-reload karon',
+            later: 'Sa sunod na lang',
+            failed: 'Wala maka-check o maka-download sa update. Siguroha nga naka-online ka.',
+            ok: 'OK'
+          };
+
+          let win = null;
+          let dlg = null, dlgLoaded = false, lastState = null;
+          let flowRunning = false;
+          let choiceResolver = null;
+
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+          // ---------- version helpers ----------
+          const parse = (v) => String(v).replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+          const cmp = (a, b) => {
+            const x = parse(a), y = parse(b);
+            for (let i = 0; i < Math.max(x.length, y.length); i++) {
+              if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1;
+            }
+            return 0;
+          };
+
+          // ---------- which page to load ----------
+          // The page that came inside the installer, or a newer one that was
+          // downloaded online (kept in the app's own data folder).
+          const updDir = () => path.join(app.getPath('userData'), 'www-update');
+          const bundledPage = () => path.join(__dirname, 'www', 'index.html');
+
+          function readOverride() {
+            try {
+              const j = JSON.parse(fs.readFileSync(path.join(updDir(), 'override.json'), 'utf8'));
+              const f = path.join(updDir(), j.file);
+              if (fs.existsSync(f) && cmp(j.version, app.getVersion()) > 0) return { version: j.version, file: f };
+            } catch (_) {}
+            return null;
+          }
+          const currentPage = () => { const o = readOverride(); return o ? o.file : bundledPage(); };
+          const currentVersion = () => { const o = readOverride(); return o ? o.version : app.getVersion(); };
+
+          // ---------- dialog window ----------
+          function openDialog() {
+            dlgLoaded = false;
+            lastState = null;
+            dlg = new BrowserWindow({
+              parent: win && !win.isDestroyed() ? win : undefined,
+              modal: !!(win && !win.isDestroyed()),
+              show: false,
+              frame: false,
+              resizable: false,
+              minimizable: false,
+              maximizable: false,
+              width: 400,
+              height: 320,
+              backgroundColor: '#16254a',
+              webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'updater-preload.js') }
+            });
+            dlg.setMenuBarVisibility(false);
+            dlg.loadFile(path.join(__dirname, 'updater.html'));
+            dlg.webContents.once('did-finish-load', () => {
+              dlgLoaded = true;
+              if (lastState) dlg.webContents.send('state', lastState);
+              dlg.show();
+            });
+            dlg.on('closed', () => { dlg = null; });
+          }
+
+          function setState(s) {
+            lastState = s;
+            if (dlg && !dlg.isDestroyed() && dlgLoaded) dlg.webContents.send('state', s);
+          }
+
+          function closeDialog() {
+            if (dlg && !dlg.isDestroyed()) dlg.close();
+            dlg = null;
+          }
+
+          // Shows buttons in the dialog and waits for the student/teacher to pick one.
+          function askChoice(state) {
+            return new Promise((resolve) => {
+              choiceResolver = resolve;
+              setState(state);
+            });
+          }
+          ipcMain.on('choice', (_e, id) => { if (choiceResolver) { const r = choiceResolver; choiceResolver = null; r(id); } });
+
+          // ---------- online check + download ----------
+          async function checkLatest() {
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), SEARCH_MS);
+            try {
+              const r = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
+                headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'GNHS-ECR' },
+                signal: ctl.signal
+              });
+              if (!r.ok) return { status: 'error' };
+              const rel = await r.json();
+              const latest = String(rel.tag_name || '').replace(/^v/i, '');
+              const asset = (rel.assets || []).find((a) => a.name === ASSET);
+              if (!latest || !asset || cmp(latest, currentVersion()) <= 0) return { status: 'none' };
+              return { status: 'update', version: latest, url: asset.browser_download_url };
+            } catch (_) {
+              return { status: 'error' };      // offline or rate-limited
+            } finally { clearTimeout(t); }
+          }
+
+          async function downloadUpdate(info, onProgress) {
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), 120000);
+            let buf;
+            try {
+              const r = await fetch(info.url, { signal: ctl.signal });
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              const total = Number(r.headers.get('content-length')) || 0;
+              const reader = r.body.getReader();
+              const chunks = [];
+              let got = 0;
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                got += value.length;
+                if (total) onProgress(Math.min(99, Math.round((got * 100) / total)));
+              }
+              buf = Buffer.concat(chunks);
+            } finally { clearTimeout(t); }
+
+            // sanity check: a complete HTML file, not an error page or a cut-off download
+            const text = buf.toString('utf8');
+            if (buf.length < 10000 || !/<\/html>\s*$/i.test(text.trim())) throw new Error('incomplete download');
+
+            fs.mkdirSync(updDir(), { recursive: true });
+            const name = 'index-' + info.version + '.html';
+            fs.writeFileSync(path.join(updDir(), name + '.part'), buf);
+            fs.renameSync(path.join(updDir(), name + '.part'), path.join(updDir(), name));
+            fs.writeFileSync(path.join(updDir(), 'override.json.part'), JSON.stringify({ version: info.version, file: name }));
+            fs.renameSync(path.join(updDir(), 'override.json.part'), path.join(updDir(), 'override.json'));
+            fs.readdirSync(updDir()).forEach((f) => {     // remove older downloaded pages
+              if (/^index-.*\.html$/.test(f) && f !== name) { try { fs.unlinkSync(path.join(updDir(), f)); } catch (_) {} }
+            });
+          }
+
+          // ---------- the whole pop-up flow ----------
+          // manual = true when started from Help > Check for updates (asks before reloading)
+          async function runUpdateFlow(manual) {
+            if (flowRunning) return;
+            flowRunning = true;
+            try {
+              const t0 = Date.now();
+              openDialog();
+              setState({ mode: 'search', text: T.searching });
+              const result = await checkLatest();
+              const wait = SEARCH_MS - (Date.now() - t0);        // keep "searching" up for the full time
+              if (wait > 0) await sleep(wait);
+
+              if (result.status === 'update') {
+                const t1 = Date.now();
+                setState({ mode: 'download', text: T.downloading, percent: 0 });
+                try {
+                  await downloadUpdate(result, (p) => setState({ mode: 'download', text: T.downloading, percent: p }));
+                } catch (_) {
+                  if (manual) await askChoice({ mode: 'warn', text: T.failed, buttons: [{ id: 'ok', label: T.ok }] });
+                  closeDialog();
+                  return;
+                }
+                const left = MIN_DOWNLOAD_MS - (Date.now() - t1);
+                if (left > 0) await sleep(left);
+                setState({ mode: 'download', text: T.downloading, percent: 100 });
+                if (manual) {
+                  const c = await askChoice({
+                    mode: 'ok', text: T.ready,
+                    buttons: [{ id: 'now', label: T.reloadNow }, { id: 'later', label: T.later, secondary: true }]
+                  });
+                  closeDialog();
+                  if (c === 'now' && win && !win.isDestroyed()) win.loadFile(currentPage());
+                } else {
+                  setState({ mode: 'ok', text: T.applying });
+                  await sleep(1500);
+                  closeDialog();
+                  if (win && !win.isDestroyed()) win.loadFile(currentPage());
+                }
+              } else if (result.status === 'none') {
+                setState({ mode: 'ok', text: T.none });
+                await sleep(NO_UPDATE_MS);
+                closeDialog();
+              } else {
+                // offline: close quietly (but tell the user if they asked for the check)
+                if (manual) await askChoice({ mode: 'warn', text: T.failed, buttons: [{ id: 'ok', label: T.ok }] });
+                closeDialog();
+              }
+            } finally {
+              flowRunning = false;
+              closeDialog();
+            }
+          }
+
+          // ---------- window and menu ----------
+          function buildMenu() {
+            const isMac = process.platform === 'darwin';
+            const template = [
+              ...(isMac ? [{ role: 'appMenu' }] : []),
+              { role: 'editMenu' },
+              ...(isMac ? [{ role: 'windowMenu' }] : []),
+              {
+                label: 'Help',
+                submenu: [
+                  { label: 'Check for updates', click: () => runUpdateFlow(true) },
+                  { type: 'separator' },
+                  { label: 'GNHS ECR v' + currentVersion(), enabled: false }
+                ]
+              }
+            ];
+            Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+          }
 
           function createWindow() {
-            const win = new BrowserWindow({
+            win = new BrowserWindow({
               show: false,
               width: 1280,
               height: 800,
-              autoHideMenuBar: true,
+              autoHideMenuBar: true,          // Windows: press Alt to show the Help menu
               title: 'GNHS ECR',
               webPreferences: { contextIsolation: true }
             });
-            Menu.setApplicationMenu(null);
-            win.loadFile(path.join(__dirname, 'www', 'index.html'));
-            win.once('ready-to-show', () => { win.maximize(); win.show(); });
+            buildMenu();
+            win.loadFile(currentPage());
+            win.once('ready-to-show', () => {
+              win.maximize();
+              win.show();
+              setTimeout(() => runUpdateFlow(false), 300);   // pop-up every time the app opens
+            });
           }
 
           app.whenReady().then(createWindow);
@@ -121,8 +471,9 @@ jobs:
             ecr/dist/GNHS-ECR-Mac-*.dmg
           if-no-files-found: error
 
+  # Adds the installers to the same release that publish-html created.
   release:
-    needs: build
+    needs: [build, publish-html]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
