@@ -1,0 +1,142 @@
+name: Build ECR for Windows and Mac
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # The HTML file in the root of the repo. Keep this name or change it here.
+  HTML_FILE: ElectronicClassRecordFINAL.html
+  # Every build gets a new version: 1.0.1, 1.0.2, 1.0.3 ...
+  VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: Mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: Package the app (Electron wrapper around the HTML file)
+        shell: bash
+        run: |
+          if [ ! -f "$HTML_FILE" ]; then
+            echo "::error::$HTML_FILE was not found in the root of the repo."
+            exit 1
+          fi
+
+          mkdir -p ecr/www ecr/build
+          cp "$HTML_FILE" ecr/www/index.html
+          # Optional: put an icon.png (512x512 or bigger) in the repo root to use it as the app icon.
+          if [ -f icon.png ]; then cp icon.png ecr/build/icon.png; fi
+
+          cat > ecr/package.json <<'EOF'
+          {
+            "name": "gnhs-ecr",
+            "version": "__VERSION__",
+            "description": "GNHS Electronic Class Record",
+            "author": "GNHS",
+            "main": "main.js",
+            "build": {
+              "appId": "com.gnhs.ecr",
+              "productName": "GNHS ECR",
+              "directories": { "buildResources": "build" },
+              "files": ["main.js", "www/**/*"],
+              "win": {
+                "target": ["nsis", "portable"]
+              },
+              "nsis": {
+                "oneClick": true,
+                "perMachine": false,
+                "artifactName": "GNHS-ECR-Setup.exe"
+              },
+              "portable": {
+                "artifactName": "GNHS-ECR-Portable.exe"
+              },
+              "mac": {
+                "target": ["dmg"],
+                "category": "public.app-category.education",
+                "identity": null,
+                "artifactName": "GNHS-ECR-Mac-${arch}.${ext}"
+              }
+            }
+          }
+          EOF
+          sed -i.bak "s/__VERSION__/$VERSION/" ecr/package.json && rm ecr/package.json.bak
+
+          cat > ecr/main.js <<'EOF'
+          const { app, BrowserWindow, Menu } = require('electron');
+          const path = require('path');
+
+          function createWindow() {
+            const win = new BrowserWindow({
+              show: false,
+              width: 1280,
+              height: 800,
+              autoHideMenuBar: true,
+              title: 'GNHS ECR',
+              webPreferences: { contextIsolation: true }
+            });
+            Menu.setApplicationMenu(null);
+            win.loadFile(path.join(__dirname, 'www', 'index.html'));
+            win.once('ready-to-show', () => { win.maximize(); win.show(); });
+          }
+
+          app.whenReady().then(createWindow);
+          app.on('window-all-closed', () => app.quit());
+          app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+          EOF
+
+          cd ecr
+          npm install --save-dev electron@31 electron-builder@24
+          if [ "${{ matrix.name }}" = "Windows" ]; then
+            npx electron-builder --win --publish never
+          else
+            npx electron-builder --mac --x64 --arm64 --publish never
+          fi
+
+      - name: List what was built
+        shell: bash
+        run: ls -la ecr/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GNHS-ECR-${{ matrix.name }}
+          path: |
+            ecr/dist/GNHS-ECR-Setup.exe
+            ecr/dist/GNHS-ECR-Portable.exe
+            ecr/dist/GNHS-ECR-Mac-*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List files
+        run: ls -R artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: GNHS ECR v${{ env.VERSION }}
+          files: |
+            artifacts/GNHS-ECR-Windows/GNHS-ECR-Setup.exe
+            artifacts/GNHS-ECR-Windows/GNHS-ECR-Portable.exe
+            artifacts/GNHS-ECR-Mac/GNHS-ECR-Mac-*.dmg
