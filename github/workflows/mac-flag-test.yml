@@ -1,0 +1,93 @@
+name: Mac flag test
+
+# Builds three small Mac (Apple Silicon) test apps so we can find out which part
+# of the ECR app makes macOS say "contains malware". Run it by hand from the
+# Actions tab. It does not publish anything or touch your releases.
+
+on:
+  workflow_dispatch:
+
+env:
+  HTML_FILE: ElectronicClassRecordFINAL.html
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [bare, html-only, html-nolock]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: Build test app (${{ matrix.variant }})
+        shell: bash
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          mkdir -p t/www
+
+          # bare       = empty Electron app, no ECR code at all
+          # html-only  = your HTML in a plain window (no updater)
+          # html-nolock = same, with the DevTools-lock script removed
+          case "$VARIANT" in
+            bare)
+              printf '<!doctype html><meta charset="utf-8"><title>test</title><h1>hello</h1>\n' > t/www/index.html
+              ;;
+            html-only)
+              cp "$HTML_FILE" t/www/index.html
+              ;;
+            html-nolock)
+              awk '
+                /var _dt=false;function _lockScreen/ { skip=1 }
+                skip { if (/<\/script>/) skip=0; next }
+                { print }
+              ' "$HTML_FILE" > t/www/index.html
+              if grep -q '_lockScreen' t/www/index.html; then
+                echo "::error::lock script was not removed"; exit 1
+              fi
+              ;;
+          esac
+
+          cat > t/main.js <<'EOF'
+          const { app, BrowserWindow } = require('electron');
+          const path = require('path');
+          app.whenReady().then(() => {
+            const w = new BrowserWindow({ width: 1280, height: 800 });
+            w.loadFile(path.join(__dirname, 'www', 'index.html'));
+          });
+          app.on('window-all-closed', () => app.quit());
+          EOF
+
+          cat > t/package.json <<EOF
+          {
+            "name": "gnhs-ecr-test-$VARIANT",
+            "version": "1.0.0",
+            "description": "ECR flag test ($VARIANT)",
+            "author": "GNHS",
+            "main": "main.js",
+            "build": {
+              "appId": "com.gnhs.ecrtest.$VARIANT",
+              "productName": "ECR Test $VARIANT",
+              "files": ["main.js", "www/**/*"],
+              "mac": {
+                "target": ["dmg"],
+                "identity": null,
+                "artifactName": "ECR-Test-$VARIANT-\${arch}.\${ext}"
+              }
+            }
+          }
+          EOF
+
+          cd t
+          npm install --save-dev electron@31 electron-builder@24
+          npx electron-builder --mac --arm64 --publish never
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ECR-Test-${{ matrix.variant }}
+          path: t/dist/*.dmg
+          if-no-files-found: error
