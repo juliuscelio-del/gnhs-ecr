@@ -89,10 +89,9 @@ jobs:
                 "artifactName": "GNHS-ECR-Portable.exe"
               },
               "mac": {
-                "target": ["dmg"],
+                "target": ["dir"],
                 "category": "public.app-category.education",
-                "identity": null,
-                "artifactName": "GNHS-ECR-Mac-${arch}.${ext}"
+                "identity": null
               }
             }
           }
@@ -456,6 +455,17 @@ jobs:
             npx electron-builder --win --publish never
           else
             npx electron-builder --mac --x64 --arm64 --publish never
+            # Ad-hoc sign each .app (same as the Phil-IRI build), then pack it into a .dmg.
+            # Without a signature, macOS flags the app as malware and removes it.
+            for APP in dist/mac/*.app dist/mac-arm64/*.app; do
+              [ -d "$APP" ] || continue
+              case "$APP" in dist/mac-arm64/*) ARCH=arm64 ;; *) ARCH=x64 ;; esac
+              codesign --force --deep -s - "$APP"
+              mkdir -p "out-$ARCH"
+              cp -R "$APP" "out-$ARCH/"
+              ln -s /Applications "out-$ARCH/Applications"
+              hdiutil create -volname "GNHS ECR" -srcfolder "out-$ARCH" -ov -format UDZO "dist/GNHS-ECR-Mac-$ARCH.dmg"
+            done
           fi
 
       - name: List what was built
