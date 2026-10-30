@@ -155,11 +155,18 @@ def main():
 
     # ---- 3) make the app re-load the roster whenever roster.csv changed ----
     old_fn = "window.ecrGet('ecr_classlist',function(err,data){var hasAny=false;"
-    new_fn = ("window.ecrGet('ecr_roster_version',function(vErr,vStored){"
-              "if(window.ECR_ROSTER_VERSION&&vStored!==window.ECR_ROSTER_VERSION){"
-              "window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){"
-              "window.ecrSet('ecr_roster_version',window.ECR_ROSTER_VERSION,function(){cb();});});return;}"
-              "window.ecrGet('ecr_classlist',function(err,data){var hasAny=false;")
+    new_fn = (
+        "window.ecrGet('ecr_roster_version',function(vErr,vStored){"
+        "var RV=window.ECR_ROSTER_VERSION;"
+        "if(RV&&vStored!==RV){"
+        "window.ecrGet('ecr_classlist',function(e2,cur){"
+        "var has=false;if(!e2&&cur&&typeof cur==='object'){Object.keys(cur).forEach(function(k){var s=cur[k];"
+        "if(s&&((s.male&&s.male.some(function(n){return n&&n.trim();}))||(s.female&&s.female.some(function(n){return n&&n.trim();}))))has=true;});}"
+        "if(vStored==null&&has){window.ecrSet('ecr_roster_version',RV,function(){cb();});return;}"
+        "window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){"
+        "window.ecrSet('ecr_roster_version',RV,function(){cb();});});"
+        "});return;}"
+        "window.ecrGet('ecr_classlist',function(err,data){var hasAny=false;")
     if "ecr_roster_version" not in html:
         if old_fn not in html:
             die("Could not patch the class list loader (HTML changed?).")
@@ -173,8 +180,9 @@ def main():
 
     # ---- 4) remember current labels for the next run ----
     html = re.sub(re.escape(MARK) + r"\{.*?\}-->\n?", "", html)
-    html = html.replace("</body>", MARK + json.dumps(cur, ensure_ascii=False) + "-->\n</body>", 1) \
-        if "</body>" in html else html + "\n" + MARK + json.dumps(cur) + "-->\n"
+    stamp = MARK + json.dumps(cur, ensure_ascii=False) + "-->\n"
+    i = html.rfind("</body>")
+    html = html[:i] + stamp + html[i:] if i >= 0 else html + "\n" + stamp
 
     open(HTML_PATH, "w", encoding="utf-8").write(html)
 

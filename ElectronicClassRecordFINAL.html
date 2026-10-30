@@ -668,12 +668,12 @@ var _imgTrap=new Image();Object.defineProperty(_imgTrap,'id',{get:function(){_lo
       <button class="tb-btn tb-teal" onclick="document.getElementById('json-import-input').click()">📂 Restore Backup</button>
       <input type="file" id="json-import-input" accept=".json" style="display:none;" onchange="importJSON(event)">
       <span class="tb-info-icon" title="Remember to back up your file regularly, in case something goes wrong.">ℹ️</span>
-      <button id="tb-connect-backup-btn" class="tb-btn tb-teal" style="display:none;" onclick="window.ecrConnectBackupFile&&window.ecrConnectBackupFile()">🔗 Connect Backup File</button>
     </div>
 
     <div class="toolbar-divider"></div>
 
     <div class="toolbar-group">
+      <button class="tb-btn tb-navy" onclick="openRosterModal()" title="Edit grade/section class lists: boys and girls">👥 Roster</button>
       <button class="tb-btn tb-navy" onclick="openWeightsModal()" title="Adjust the weight of each component per subject">⚖️ Grade Weights</button>
       <button class="tb-btn tb-teal2" id="toolbar-changepw-btn" onclick="openChangePwModal()" title="Change your password" style="display:none;">🔑 Change Password</button>
     </div>
@@ -4286,7 +4286,6 @@ if(_LOGO_SRC){var _li=document.getElementById('popup-logo-2'); if(_li){_li.src=_
 <\/script>
 ${getEmbeddedPdfLibsScriptTag()}
 <script>${buildDownloadPdfScript(`'Grade_Categorization_${secName.replace(/[^a-z0-9]+/gi,'_')}_${term}.pdf'`)}<\/script>
-<!--ECR_ROSTER_STATE:{"rizal": {"grade": 7, "name": "Rizal"}, "bonifacio": {"grade": 7, "name": "Bonifacio"}, "mabini": {"grade": 8, "name": "Mabini"}, "aquino": {"grade": 8, "name": "Aquino"}, "jacinto": {"grade": 8, "name": "Jacinto"}, "juan-luna": {"grade": 9, "name": "Juan Luna"}, "del-pilar": {"grade": 9, "name": "Del Pilar"}, "silang": {"grade": 10, "name": "Silang"}, "dagohoy": {"grade": 10, "name": "Dagohoy"}}-->
 </body>
 </html>`;
   const pw=window.open('','_blank','width=1200,height=800,scrollbars=yes');
@@ -4647,7 +4646,7 @@ function ensureRows(secKey,gender,count){const bodyIds=(BODY_MAP[secKey]||{})[ge
 window.applyClassList=function(secKey){['male','female'].forEach(function(gender){const colId=secKey+'-cl-'+gender+'-col';const col=document.getElementById(colId);if(!col)return;const inputs=col.querySelectorAll('input[data-cl-idx]');let filledCount=0;inputs.forEach(function(inp){if(inp.value.trim())filledCount=parseInt(inp.dataset.clIdx)+1;});ensureRows(secKey,gender,filledCount);inputs.forEach(function(inp){const idx=parseInt(inp.dataset.clIdx);pushNameToTables(secKey,gender,idx,inp.value.trim());});});['male','female'].forEach(function(gender){var map=sectionAddRowMap?sectionAddRowMap.find(function(m){return m.q1===secKey+'-'+gender+'-body';}):null;var q1Id=secKey+'-'+gender+'-body';var q1Body=document.getElementById(q1Id);if(q1Body){q1Body.querySelectorAll('tr[data-role="student"] input.name-input').forEach(function(inp){if(typeof lockQ1NameInput==='function')lockQ1NameInput(inp);});}});['male','female'].forEach(function(gender){var colId=secKey+'-cl-'+gender+'-col';var col=document.getElementById(colId);if(!col)return;var inputs=col.querySelectorAll('input[data-cl-idx]');var bodyIds=(BODY_MAP[secKey]||{})[gender]||[];bodyIds.forEach(function(tbodyId){var cache=window._subjectScoreCache;if(!cache||!cache[tbodyId])return;var tbody=document.getElementById(tbodyId);if(!tbody)return;var studentRows=Array.from(tbody.querySelectorAll('tr[data-role="student"]'));Object.keys(cache[tbodyId]).forEach(function(subjKey){var snapshot=cache[tbodyId][subjKey];inputs.forEach(function(inp){var idx=parseInt(inp.dataset.clIdx);var tr=studentRows[idx];if(!tr)return;var rowIdx=Array.from(tbody.querySelectorAll('tr')).indexOf(tr);if(rowIdx<0)return;if(!snapshot[rowIdx])snapshot[rowIdx]={};snapshot[rowIdx]['name__0']=inp.value.trim();});});});});document.dispatchEvent(new Event('input',{bubbles:true}));const btn=document.querySelector('#'+secKey+'-cl .cl-apply-btn');if(btn){const orig=btn.textContent;btn.textContent='✅ Applied!';btn.style.background='linear-gradient(135deg,#065f46,#059669)';setTimeout(function(){btn.textContent=orig;btn.style.background='';},2000);}};window.showClassList=function(sectionId,panelId,evt){const section=document.getElementById(sectionId);if(!section)return;section.querySelectorAll('.sub-tab-btn').forEach(function(b){b.classList.remove('active');});section.querySelectorAll('.sub-tab-content, .cl-panel').forEach(function(el){el.classList.remove('active');});if(evt&&evt.currentTarget)evt.currentTarget.classList.add('active');const panel=document.getElementById(panelId);if(panel)panel.classList.add('active');const secKey=panelId.replace(/-cl$/,'');buildColumn(secKey+'-cl-male-col',secKey,'male',false);buildColumn(secKey+'-cl-female-col',secKey,'female',true);populateFromQ1(secKey,'male');populateFromQ1(secKey,'female');};var _origShowSubTab=window.showSubTab;window.showSubTab=function(sectionId,subTabId,evt){const section=document.getElementById(sectionId);if(section){section.querySelectorAll('.cl-panel').forEach(function(el){el.classList.remove('active');});section.querySelectorAll('.cl-tab-btn').forEach(function(b){b.classList.remove('active');});}
 if(typeof _origShowSubTab==='function'){_origShowSubTab(sectionId,subTabId,evt);}};function saveClassLists(){var data={};Object.keys(BODY_MAP).forEach(function(secKey){data[secKey]={male:[],female:[]};['male','female'].forEach(function(gender){var colId=secKey+'-cl-'+gender+'-col';var col=document.getElementById(colId);if(!col)return;var inputs=col.querySelectorAll('input[data-cl-idx]');inputs.forEach(function(inp){data[secKey][gender][parseInt(inp.dataset.clIdx)]=inp.value;});});});window.ecrSet('ecr_classlist',data,function(){});}
 function restoreClassLists(){window.ecrGet('ecr_classlist',function(err,data){if(err||!data)return;Object.keys(data).forEach(function(secKey){['male','female'].forEach(function(gender){var names=data[secKey][gender]||[];if(!names.length)return;var isFemale=gender==='female';buildColumn(secKey+'-cl-'+gender+'-col',secKey,gender,isFemale);var colId=secKey+'-cl-'+gender+'-col';var col=document.getElementById(colId);if(!col)return;var inputs=col.querySelectorAll('input[data-cl-idx]');inputs.forEach(function(inp){var idx=parseInt(inp.dataset.clIdx);if(names[idx]!==undefined&&names[idx]!==''){inp.value=names[idx];}});});if(typeof window.applyClassList==='function'){window.applyClassList(secKey);}});});}
-document.addEventListener('input',function(e){if(e.target.closest&&e.target.closest('.cl-panel')){saveClassLists();}});function seedEmbeddedClassListIfEmpty(cb){if(typeof window.ecrGet!=='function'||!window.ECR_EMBEDDED_CLASSLIST){cb();return;}window.ecrGet('ecr_roster_version',function(vErr,vStored){if(window.ECR_ROSTER_VERSION&&vStored!==window.ECR_ROSTER_VERSION){window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){window.ecrSet('ecr_roster_version',window.ECR_ROSTER_VERSION,function(){cb();});});return;}window.ecrGet('ecr_classlist',function(err,data){var hasAny=false;if(!err&&data&&typeof data==='object'){Object.keys(data).forEach(function(k){var sec=data[k];if(sec&&((sec.male&&sec.male.some(function(n){return n&&n.trim();}))||(sec.female&&sec.female.some(function(n){return n&&n.trim();})))){hasAny=true;}});}if(hasAny){cb();return;}if(typeof window.ecrSet!=='function'){cb();return;}window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){console.log('[ECR] Seeded embedded class list.');cb();});});});}function seedThenRestore(){seedEmbeddedClassListIfEmpty(function(){restoreClassLists();});}document.addEventListener('idb-ready',function(){setTimeout(seedThenRestore,1800);});if(window._idbReady)setTimeout(seedThenRestore,1800);console.log('✅ Class List panel active');window._buildCLColumn=buildColumn;window._populateCLFromQ1=populateFromQ1;window.restoreClassLists=restoreClassLists;})();
+document.addEventListener('input',function(e){if(e.target.closest&&e.target.closest('.cl-panel')){saveClassLists();}});function seedEmbeddedClassListIfEmpty(cb){if(typeof window.ecrGet!=='function'||!window.ECR_EMBEDDED_CLASSLIST){cb();return;}window.ecrGet('ecr_roster_version',function(vErr,vStored){var RV=window.ECR_ROSTER_VERSION;if(RV&&vStored!==RV){window.ecrGet('ecr_classlist',function(e2,cur){var has=false;if(!e2&&cur&&typeof cur==='object'){Object.keys(cur).forEach(function(k){var s=cur[k];if(s&&((s.male&&s.male.some(function(n){return n&&n.trim();}))||(s.female&&s.female.some(function(n){return n&&n.trim();}))))has=true;});}if(vStored==null&&has){window.ecrSet('ecr_roster_version',RV,function(){cb();});return;}window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){window.ecrSet('ecr_roster_version',RV,function(){cb();});});});return;}window.ecrGet('ecr_classlist',function(err,data){var hasAny=false;if(!err&&data&&typeof data==='object'){Object.keys(data).forEach(function(k){var sec=data[k];if(sec&&((sec.male&&sec.male.some(function(n){return n&&n.trim();}))||(sec.female&&sec.female.some(function(n){return n&&n.trim();})))){hasAny=true;}});}if(hasAny){cb();return;}if(typeof window.ecrSet!=='function'){cb();return;}window.ecrSet('ecr_classlist',window.ECR_EMBEDDED_CLASSLIST,function(){console.log('[ECR] Seeded embedded class list.');cb();});});});}function seedThenRestore(){seedEmbeddedClassListIfEmpty(function(){restoreClassLists();});}document.addEventListener('idb-ready',function(){setTimeout(seedThenRestore,1800);});if(window._idbReady)setTimeout(seedThenRestore,1800);console.log('✅ Class List panel active');window._buildCLColumn=buildColumn;window._populateCLFromQ1=populateFromQ1;window.restoreClassLists=restoreClassLists;})();
 function _recalcInitialActiveTab(){try{const activeTab=document.querySelector('.tab-content.active');if(activeTab&&typeof forceRecalcTab==='function')forceRecalcTab(activeTab.id);}catch(e){console.warn('[ECR] initial active-tab recalc error:',e);}}
 document.addEventListener('idb-ready',function(){setTimeout(_recalcInitialActiveTab,2200);});
 if(window._idbReady)setTimeout(_recalcInitialActiveTab,2200);
@@ -4707,7 +4706,7 @@ window.addEventListener('beforeunload',flushSave);document.addEventListener('vis
 
 /* ── Banner helpers ─────────────────────────────────────────────────── */
 function removeBanner(){var b=document.getElementById('ecr-no-bridge-banner');if(b)b.remove();var btn=document.getElementById('tb-connect-backup-btn');if(btn)btn.style.display='none';}
-function showBanner(html,bg){try{var existing=document.getElementById('ecr-no-bridge-banner');var b=existing||document.createElement('div');b.id='ecr-no-bridge-banner';b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:'+(bg||'#7c2d12')+';color:#fff;font:600 13px/1.4 -apple-system,sans-serif;padding:8px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3);';b.innerHTML=html;if(!existing)document.body.insertBefore(b,document.body.firstChild);}catch(e){}}
+function showBanner(html,bg){return;try{var existing=document.getElementById('ecr-no-bridge-banner');var b=existing||document.createElement('div');b.id='ecr-no-bridge-banner';b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:'+(bg||'#7c2d12')+';color:#fff;font:600 13px/1.4 -apple-system,sans-serif;padding:8px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3);';b.innerHTML=html;if(!existing)document.body.insertBefore(b,document.body.firstChild);}catch(e){}}
 function showNoBridgeBanner(reason){showBanner('⚠️ No on-disk backup file is active ('+reason+'). Your data is only saved inside this browser/app\'s local storage — it will NOT survive a reinstall, profile reset, or "clear browsing data." Please back up regularly (Menu → Export) until this is fixed. <span style="text-decoration:underline;cursor:pointer;margin-left:8px;" onclick="this.parentElement.remove()">Dismiss</span>','#7c2d12');}
 function showConnectBanner(){showBanner('📁 Your data is only in this browser\'s storage right now. Click to link a real backup file on your computer — it\'ll auto-update every time you save. <button onclick="window.ecrConnectBackupFile()" style="margin-left:10px;background:#fff;color:#1e3a5c;border:none;border-radius:5px;padding:4px 12px;font:700 12px -apple-system,sans-serif;cursor:pointer;">🔗 Connect Backup File</button> <span style="text-decoration:underline;cursor:pointer;margin-left:8px;" onclick="this.parentElement.remove()">Dismiss</span>','#7c2d12');var btn=document.getElementById('tb-connect-backup-btn');if(btn){btn.style.display='';btn.textContent='🔗 Connect Backup File';}}
 function showReconnectBanner(){showBanner('🔗 Your backup file is linked, but the browser needs a quick click to resume auto-saving to it after this restart. <button onclick="window.ecrConnectBackupFile()" style="margin-left:10px;background:#fff;color:#1e3a5c;border:none;border-radius:5px;padding:4px 12px;font:700 12px -apple-system,sans-serif;cursor:pointer;">🔓 Reconnect Backup File</button> <span style="text-decoration:underline;cursor:pointer;margin-left:8px;" onclick="this.parentElement.remove()">Dismiss</span>','#7c2d12');var btn=document.getElementById('tb-connect-backup-btn');if(btn){btn.style.display='';btn.textContent='🔓 Reconnect Backup File';}}
@@ -4946,5 +4945,175 @@ api.activateLicense(code,owner).then(function(result){if(result.ok){overlay.styl
   console.log('\u2705 Max Score Mirror: Boys \u2192 Girls sync loaded.');
 })();
 </script>
+<!-- ===== ROSTER MODAL ===== -->
+<div id="rst-overlay" style="display:none;position:fixed;inset:0;z-index:99998;background:rgba(10,20,50,0.7);align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;">
+  <div style="background:#fff;border-radius:18px;padding:30px 32px 24px;width:100%;max-width:760px;max-height:92vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);position:relative;">
+    <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#2563eb,#0f766e);border-radius:18px 18px 0 0;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h2 style="font-size:18px;font-weight:800;color:#0f2744;margin:0;">👥 Roster – Boys &amp; Girls per Section</h2>
+      <button onclick="closeRosterModal()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:2px 6px;">&times;</button>
+    </div>
+    <p style="font-size:12px;color:#64748b;margin:0 0 14px;">Pick a grade &amp; section, type one learner per line, then Save. Keep the same line order so scores stay with the right learner (leave a blank line to keep an empty row). Maximum 30 boys and 30 girls per section.</p>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:700;color:#374151;margin-right:8px;">Grade &amp; Section:</label>
+      <select id="rst-section" onchange="rosterLoadSection()" style="padding:7px 10px;border-radius:8px;border:2px solid #e2e8f0;font-size:14px;font-family:inherit;min-width:220px;"></select>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:260px;">
+        <label style="font-size:12px;font-weight:700;color:#1d4ed8;display:block;margin-bottom:5px;">♂ Boys <span id="rst-male-count" style="font-weight:600;color:#64748b;"></span></label>
+        <textarea id="rst-male" rows="16" oninput="rosterCount()" placeholder="One name per line" style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:13px;font-family:inherit;resize:vertical;text-transform:uppercase;"></textarea>
+      </div>
+      <div style="flex:1;min-width:260px;">
+        <label style="font-size:12px;font-weight:700;color:#be185d;display:block;margin-bottom:5px;">♀ Girls <span id="rst-female-count" style="font-weight:600;color:#64748b;"></span></label>
+        <textarea id="rst-female" rows="16" oninput="rosterCount()" placeholder="One name per line" style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid #e2e8f0;border-radius:10px;font-size:13px;font-family:inherit;resize:vertical;text-transform:uppercase;"></textarea>
+      </div>
+    </div>
+    <div id="rst-msg" style="min-height:18px;font-size:12.5px;font-weight:600;margin:10px 0 0;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">
+      <button onclick="rosterSave()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Save this section</button>
+      <span style="flex:1;"></span>
+      <button onclick="document.getElementById('rst-import-input').click()" style="background:#f1f5f9;color:#0f2744;border:1.5px solid #cbd5e1;border-radius:10px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">📂 Import CSV (all sections)</button>
+      <button onclick="rosterExportCSV()" style="background:#f1f5f9;color:#0f2744;border:1.5px solid #cbd5e1;border-radius:10px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Export CSV</button>
+      <input type="file" id="rst-import-input" accept=".csv" style="display:none;" onchange="rosterImportCSV(event)">
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){'use strict';
+var MAXN=30;
+var KEYS=['rizal','bonifacio','mabini','aquino','jacinto','juan-luna','del-pilar','silang','dagohoy'];
+function $(id){return document.getElementById(id);}
+function sections(){var sel=$('clear-section'),out=[];if(!sel)return out;Array.prototype.forEach.call(sel.options,function(o){if(o.value&&o.value!=='ALL')out.push({key:o.value,label:o.textContent.trim()});});return out;}
+function parseLabel(label){var m=/^G(\d+)\s*[\u2013-]\s*(.+)$/.exec(label);return m?{grade:m[1],name:m[2].trim()}:{grade:'',name:label};}
+function msg(t,ok){var el=$('rst-msg');if(!el)return;el.textContent=t||'';el.style.color=ok===false?'#b91c1c':'#047857';}
+function cleanName(s){return String(s||'').replace(/[0-9]/g,'').replace(/\s+/g,' ').trim().toUpperCase();}
+function toArr(text){var lines=String(text||'').split(/\r?\n/).map(cleanName);while(lines.length&&!lines[lines.length-1])lines.pop();return lines.slice(0,MAXN);}
+function pad(a){var o=[];for(var i=0;i<MAXN;i++)o.push(a&&a[i]?a[i]:'');return o;}
+function trim(a){a=(a||[]).map(function(x){return x||'';});while(a.length&&!a[a.length-1])a.pop();return a;}
+function getData(cb){
+  if(typeof window.ecrGet!=='function'){cb({});return;}
+  window.ecrGet('ecr_classlist',function(err,data){
+    var d=(!err&&data&&typeof data==='object')?JSON.parse(JSON.stringify(data)):null;
+    var emb=window.ECR_EMBEDDED_CLASSLIST||{};
+    if(!d)d=JSON.parse(JSON.stringify(emb));
+    KEYS.forEach(function(k){if(!d[k])d[k]={male:[],female:[]};if(!d[k].male)d[k].male=[];if(!d[k].female)d[k].female=[];});
+    cb(d);
+  });
+}
+function fillAll(d){
+  KEYS.forEach(function(k){['male','female'].forEach(function(g){
+    var id=k+'-cl-'+g+'-col';
+    if(typeof window._buildCLColumn==='function')window._buildCLColumn(id,k,g,g==='female');
+    var col=$(id);if(!col)return;
+    var arr=(d[k]&&d[k][g])||[];
+    col.querySelectorAll('input[data-cl-idx]').forEach(function(inp){inp.value=arr[parseInt(inp.dataset.clIdx,10)]||'';});
+  });});
+}
+function persistAndApply(d,changedKeys,cb){
+  window.ecrSet('ecr_classlist',d,function(){
+    fillAll(d);
+    changedKeys.forEach(function(k){if(typeof window.applyClassList==='function')window.applyClassList(k);});
+    var any=document.querySelector('.cl-panel input[data-cl-idx]');
+    if(any)any.dispatchEvent(new Event('input',{bubbles:true}));
+    if(cb)cb();
+  });
+}
+window.rosterCount=function(){
+  ['male','female'].forEach(function(g){var n=toArr($('rst-'+g).value).filter(Boolean).length;var el=$('rst-'+g+'-count');el.textContent='('+n+' / '+MAXN+')';el.style.color=n>MAXN?'#b91c1c':'#64748b';});
+};
+window.rosterLoadSection=function(keepMsg){
+  var key=$('rst-section').value;if(keepMsg!==true)msg('');
+  getData(function(d){
+    $('rst-male').value=trim(d[key].male).join('\n');
+    $('rst-female').value=trim(d[key].female).join('\n');
+    window.rosterCount();
+  });
+};
+window.openRosterModal=function(){
+  var sel=$('rst-section'),prev=sel.value;sel.innerHTML='';
+  sections().forEach(function(s){var o=document.createElement('option');o.value=s.key;o.textContent=s.label;sel.appendChild(o);});
+  if(prev)sel.value=prev;
+  $('rst-overlay').style.display='flex';window.rosterLoadSection();
+};
+window.closeRosterModal=function(){$('rst-overlay').style.display='none';};
+window.rosterSave=function(){
+  var key=$('rst-section').value;
+  var rawM=String($('rst-male').value||'').split(/\r?\n/).map(cleanName),rawF=String($('rst-female').value||'').split(/\r?\n/).map(cleanName);
+  if(trim(rawM).length>MAXN||trim(rawF).length>MAXN){msg('Too many names – the limit is '+MAXN+' boys and '+MAXN+' girls per section.',false);return;}
+  var m=toArr($('rst-male').value),f=toArr($('rst-female').value);
+  getData(function(d){
+    d[key]={male:pad(m),female:pad(f)};
+    persistAndApply(d,[key],function(){
+      msg('Saved ✔  '+m.filter(Boolean).length+' boys, '+f.filter(Boolean).length+' girls.',true);
+    });
+  });
+};
+function csvEsc(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+window.rosterExportCSV=function(){
+  getData(function(d){
+    var rows=[['Grade','Section','Sex','Name']];
+    sections().forEach(function(s){var p=parseLabel(s.label);
+      trim(d[s.key].male).forEach(function(n){if(n)rows.push([p.grade,p.name,'Boy',n]);});
+      trim(d[s.key].female).forEach(function(n){if(n)rows.push([p.grade,p.name,'Girl',n]);});
+    });
+    var text='\uFEFF'+rows.map(function(r){return r.map(csvEsc).join(',');}).join('\r\n');
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));a.download='roster.csv';document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+    msg('Exported roster.csv',true);
+  });
+};
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'');var rows=[],row=[],cur='',q=false;
+  for(var i=0;i<text.length;i++){var c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}
+    else if(c==='"')q=true;
+    else if(c===','){row.push(cur);cur='';}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cur);cur='';rows.push(row);row=[];}
+    else cur+=c;}
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(function(r){return r.some(function(x){return String(x).trim();});});
+}
+window.rosterImportCSV=function(ev){
+  var file=ev.target.files&&ev.target.files[0];ev.target.value='';if(!file)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var rows=parseCSV(String(rd.result||''));
+    if(!rows.length){msg('That CSV is empty.',false);return;}
+    var h=rows[0].map(function(x){return String(x).trim().toLowerCase();});
+    var ig=h.indexOf('grade'),is=h.indexOf('section'),ix=h.indexOf('sex'),inn=h.indexOf('name');
+    if(ig<0||is<0||ix<0||inn<0){msg('First row must be: Grade,Section,Sex,Name',false);return;}
+    var secs=sections(),byLabel={};
+    secs.forEach(function(s){var p=parseLabel(s.label);byLabel[p.grade+'|'+p.name.toLowerCase()]=s.key;});
+    var got={},skipped={},bad=0;
+    rows.slice(1).forEach(function(r){
+      var g=String(r[ig]||'').replace(/grade/i,'').trim(),sn=String(r[is]||'').trim(),sx=String(r[ix]||'').trim().toLowerCase(),nm=cleanName(r[inn]);
+      if(!nm)return;
+      var key=byLabel[g+'|'+sn.toLowerCase()];
+      if(!key){skipped['G'+g+' '+sn]=1;return;}
+      var gender=/^(boy|boys|m|male)$/.test(sx)?'male':/^(girl|girls|f|female)$/.test(sx)?'female':null;
+      if(!gender){bad++;return;}
+      if(!got[key])got[key]={male:[],female:[]};
+      got[key][gender].push(nm);
+    });
+    var keys=Object.keys(got);
+    if(!keys.length){msg('No rows matched the sections in this app. Skipped: '+Object.keys(skipped).join(', '),false);return;}
+    for(var i=0;i<keys.length;i++){if(got[keys[i]].male.length>MAXN||got[keys[i]].female.length>MAXN){msg('A section in the CSV has more than '+MAXN+' boys or girls.',false);return;}}
+    if(!window.confirm('Replace the boys and girls lists of '+keys.length+' section(s) with the CSV contents?'))return;
+    getData(function(d){
+      keys.forEach(function(k){d[k]={male:pad(got[k].male),female:pad(got[k].female)};});
+      persistAndApply(d,keys,function(){
+        var extra=Object.keys(skipped).length?'  Skipped (no such section): '+Object.keys(skipped).join(', '):'';
+        msg('Imported '+keys.length+' section(s).'+extra+(bad?'  '+bad+' row(s) had no Boy/Girl value.':''),true);
+        window.rosterLoadSection(true);
+      });
+    });
+  };
+  rd.readAsText(file,'utf-8');
+};
+})();
+</script>
+
+<!--ECR_ROSTER_STATE:{"rizal": {"grade": 7, "name": "Rizal"}, "bonifacio": {"grade": 7, "name": "Bonifacio"}, "mabini": {"grade": 8, "name": "Mabini"}, "aquino": {"grade": 8, "name": "Aquino"}, "jacinto": {"grade": 8, "name": "Jacinto"}, "juan-luna": {"grade": 9, "name": "Juan Luna"}, "del-pilar": {"grade": 9, "name": "Del Pilar"}, "silang": {"grade": 10, "name": "Silang"}, "dagohoy": {"grade": 10, "name": "Dagohoy"}}-->
 </body>
 </html>
