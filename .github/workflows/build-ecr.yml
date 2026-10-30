@@ -62,8 +62,17 @@ jobs:
 
           mkdir -p ecr/www ecr/build
           cp "$HTML_FILE" ecr/www/index.html
-          # Optional: put an icon.png (512x512 or bigger) in the repo root to use it as the app icon.
-          if [ -f icon.png ]; then cp icon.png ecr/build/icon.png; fi
+
+          # App icons: icon.icns (Mac), icon.ico (Windows) and icon.png go in the
+          # repo's build/ folder (or the repo root). They are copied into ecr/build.
+          for ICON in icon.icns icon.ico icon.png; do
+            if [ -f "build/$ICON" ]; then
+              cp "build/$ICON" "ecr/build/$ICON"
+            elif [ -f "$ICON" ]; then
+              cp "$ICON" "ecr/build/$ICON"
+            fi
+          done
+          ls -la ecr/build
 
           cat > ecr/package.json <<'EOF'
           {
@@ -78,6 +87,7 @@ jobs:
               "directories": { "buildResources": "build" },
               "files": ["main.js", "updater-preload.js", "updater.html", "www/**/*"],
               "win": {
+                "icon": "build/icon.ico",
                 "target": ["nsis", "portable"]
               },
               "nsis": {
@@ -89,6 +99,7 @@ jobs:
                 "artifactName": "GNHS-ECR-Portable.exe"
               },
               "mac": {
+                "icon": "build/icon.icns",
                 "target": ["dir"],
                 "category": "public.app-category.education",
                 "identity": null
