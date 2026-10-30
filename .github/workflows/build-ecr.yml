@@ -15,10 +15,133 @@ env:
   VERSION: 1.0.${{ github.run_number }}
 
 jobs:
+  # SAFETY CHECK: stops the build if the HTML no longer contains the storage names
+  # that teachers' saved records depend on. If you changed one ON PURPOSE, add
+  # [allow-storage-change] to the commit message to let the build continue.
+  check-storage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that saved-data names are untouched
+        shell: bash
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ ! -f "$HTML_FILE" ]; then
+            echo "::error::$HTML_FILE was not found in the root of the repo."
+            exit 1
+          fi
+
+          cat > protected.txt <<'EOF'
+          DB_NAME='ecr_scores_db';var DB_VERSION=1;var STORE_NAME='scores';var RECORD_KEY='snapshot'
+          DB_NAME='ecr_settings_db';var DB_VERSION=1;var STORE='settings'
+          HDB_NAME='ecr_filehandle_db',HDB_STORE='handles',HDB_KEY='backup'
+          ecr_users_v1
+          ecr_license_token_gnhs
+          ecr_act_attempts_v2
+          ecr_last_server_verify
+          teacher_profile_v2
+          ecr_subject_weights_v1
+          ecr_classlist
+          ecr_sig-coordinator
+          ecr_sig-principal
+          ecr_sig-teacher
+          school_logo
+          ecr_settings_idb_migrated_v1
+          ecr_main_db_deleted_v3
+          ecr_last_manual_backup_ts
+          ecr_data.json
+          ecr_ds_meta
+          ecr_session
+          'rizal-male-body':'r0m'
+          'rizal-female-body':'r0f'
+          'rizal-male-body-q2':'r2m'
+          'rizal-female-body-q2':'r2f'
+          'rizal-male-body-q3':'r3m'
+          'rizal-female-body-q3':'r3f'
+          'bonifacio-male-body':'b0m'
+          'bonifacio-female-body':'b0f'
+          'bonifacio-male-body-q2':'b2m'
+          'bonifacio-female-body-q2':'b2f'
+          'bonifacio-male-body-q3':'b3m'
+          'bonifacio-female-body-q3':'b3f'
+          'mabini-male-body':'m0m'
+          'mabini-female-body':'m0f'
+          'mabini-male-body-q2':'m2m'
+          'mabini-female-body-q2':'m2f'
+          'mabini-male-body-q3':'m3m'
+          'mabini-female-body-q3':'m3f'
+          'aquino-male-body':'a0m'
+          'aquino-female-body':'a0f'
+          'aquino-male-body-q2':'a2m'
+          'aquino-female-body-q2':'a2f'
+          'aquino-male-body-q3':'a3m'
+          'aquino-female-body-q3':'a3f'
+          'jacinto-male-body':'k0m'
+          'jacinto-female-body':'k0f'
+          'jacinto-male-body-q2':'k2m'
+          'jacinto-female-body-q2':'k2f'
+          'jacinto-male-body-q3':'k3m'
+          'jacinto-female-body-q3':'k3f'
+          'juan-luna-male-body':'j0m'
+          'juan-luna-female-body':'j0f'
+          'juan-luna-male-body-q2':'j2m'
+          'juan-luna-female-body-q2':'j2f'
+          'juan-luna-male-body-q3':'j3m'
+          'juan-luna-female-body-q3':'j3f'
+          'del-pilar-male-body':'d0m'
+          'del-pilar-female-body':'d0f'
+          'del-pilar-male-body-q2':'d2m'
+          'del-pilar-female-body-q2':'d2f'
+          'del-pilar-male-body-q3':'d3m'
+          'del-pilar-female-body-q3':'d3f'
+          'silang-male-body':'s0m'
+          'silang-female-body':'s0f'
+          'silang-male-body-q2':'s2m'
+          'silang-female-body-q2':'s2f'
+          'silang-male-body-q3':'s3m'
+          'silang-female-body-q3':'s3f'
+          'dagohoy-male-body':'g0m'
+          'dagohoy-female-body':'g0f'
+          'dagohoy-male-body-q2':'g2m'
+          'dagohoy-female-body-q2':'g2f'
+          'dagohoy-male-body-q3':'g3m'
+          'dagohoy-female-body-q3':'g3f'
+          EOF
+
+          MISSING=0
+          TOTAL=0
+          while IFS= read -r NAME; do
+            [ -z "$NAME" ] && continue
+            TOTAL=$((TOTAL+1))
+            if ! grep -qF -- "$NAME" "$HTML_FILE"; then
+              echo "::warning::MISSING or CHANGED: $NAME"
+              MISSING=$((MISSING+1))
+            fi
+          done < protected.txt
+
+          if [ "$MISSING" -eq 0 ]; then
+            echo "OK: all $TOTAL protected storage names are still in $HTML_FILE."
+            exit 0
+          fi
+
+          echo "::warning::WARNING: $MISSING of $TOTAL storage names were removed or renamed in $HTML_FILE."
+          echo "::warning::Teachers who update the app may LOSE their saved records (scores, users, settings)."
+
+          if echo "$COMMIT_MSG" | grep -qF "[allow-storage-change]"; then
+            echo "Commit message contains [allow-storage-change], so the build continues."
+            exit 0
+          fi
+
+          echo "::error::Build stopped to protect saved data. Undo the change, or add [allow-storage-change] to the commit message if it is intentional."
+          exit 1
+
   # FAST online update: publishes just the HTML file as a release (takes about
   # a minute). Installed apps download this file by themselves, so you do not
   # have to wait for the Windows/Mac installers to finish building.
   publish-html:
+    needs: check-storage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +161,7 @@ jobs:
           files: ecr-app.html
 
   build:
+    needs: check-storage
     strategy:
       fail-fast: false
       matrix:
