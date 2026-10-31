@@ -2,7 +2,7 @@
 // React layer (login + roster) bundled inline just before </body>.
 //   node build.mjs [--src ../ElectronicClassRecordFINAL.html] [--out dist/ElectronicClassRecordFINAL.html]
 //
-// NOTE: --src must be the HTML that already contains the extra section ("lapu-lapu").
+// NOTE: --src must be the HTML that already contains the extra sections (use the ElectronicClassRecordFINAL.html I gave you).
 // The roster's section list is also patched below, so you do not need to touch src/.
 import { build } from 'esbuild';
 import fs from 'node:fs';
@@ -37,17 +37,18 @@ const result = await build({
 // An inline <script> must never contain a literal "</script".
 let js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 
-// Extra sections the roster must know about (must also exist in the HTML).
-const EXTRA_SECTIONS = ['lapu-lapu'];
+// Extra sections the roster must know about (they must also exist in the HTML --src file).
+const EXTRA_SECTIONS = ['lapu-lapu', 'spare-1', 'spare-2', 'spare-3', 'spare-4', 'spare-5'];
 const LAST = '"silang","dagohoy"]';
-for (const key of EXTRA_SECTIONS) {
-  if (js.includes('"' + key + '"')) continue; // already in src/, nothing to do
+if (js.includes('"' + EXTRA_SECTIONS[0] + '"')) {
+  console.log('Roster list in src/ already has the extra sections - nothing to add.');
+} else {
   if (js.split(LAST).length !== 2) {
-    console.error('Could not find the roster section list in the React bundle to add "' + key + '".');
+    console.error('Could not find the roster section list in the React bundle.');
     process.exit(1);
   }
-  js = js.replace(LAST, '"silang","dagohoy","' + key + '"]');
-  console.log('Added section "' + key + '" to the roster list.');
+  js = js.replace(LAST, '"silang","dagohoy",' + EXTRA_SECTIONS.map(k => '"' + k + '"').join(',') + ']');
+  console.log('Added ' + EXTRA_SECTIONS.length + ' extra sections to the roster list.');
 }
 
 let html = fs.readFileSync(src, 'utf8');
