@@ -137,6 +137,7 @@ jobs:
 
           cd ecr
           npm install --save-dev electron@31 electron-builder@24
+          npm install --save adm-zip@0.5.16
 
           if [ "${{ matrix.name }}" = "Windows" ]; then
             npx electron-builder --win --publish never
