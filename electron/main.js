@@ -73,35 +73,58 @@ function currentVersion() {
 }
 const box = (opts) => (win && !win.isDestroyed() ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
 
+async function getLatestVersion() {
+  // /releases/latest redirects to /releases/tag/vX.Y.Z (no API rate limit)
+  const r = await fetch(`https://github.com/${GH_REPO}/releases/latest`, { redirect: 'manual', headers: { 'User-Agent': 'GNHS-ECR' } });
+  const loc = r.headers.get('location') || '';
+  const m = loc.match(/\/tag\/v?([0-9.]+)$/);
+  if (!m) throw new Error('Could not find the latest release');
+  return m[1];
+}
+
+// Download + unpack the release's ecr-app.zip into the "pending" folder.
+async function downloadUpdate(latest) {
+  if (!/^[0-9.]+$/.test(String(latest))) throw new Error('Bad version');
+  const zr = await fetch(`https://github.com/${GH_REPO}/releases/download/v${latest}/${ASSET}`, { headers: { 'User-Agent': 'GNHS-ECR' } });
+  if (!zr.ok) throw new Error('Download failed (' + zr.status + ')');
+  const buf = Buffer.from(await zr.arrayBuffer());
+  const AdmZip = require('adm-zip');
+  const tmp = pendDir() + '.tmp';
+  fs.rmSync(tmp, { recursive: true, force: true });
+  new AdmZip(buf).extractAllTo(tmp, true);
+  if (!fs.existsSync(path.join(tmp, 'index.html'))) throw new Error('Update package is invalid');
+  fs.writeFileSync(path.join(tmp, '.version'), String(latest));
+  fs.rmSync(pendDir(), { recursive: true, force: true });
+  fs.renameSync(tmp, pendDir());
+}
+
+// Used by the page's own update banner (see ecr-update-snippet.html)
+ipcMain.handle('ecr:check-update', async () => {
+  try {
+    const latest = await getLatestVersion();
+    const current = currentVersion();
+    return { ok: true, current, latest, available: cmpVer(latest, current) > 0 };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.handle('ecr:install-update', async (_e, latest) => {
+  try { await downloadUpdate(latest); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.handle('ecr:restart', () => { app.relaunch(); app.quit(); });
+
+// Help menu > Check for updates (native dialogs)
 let checking = false;
 async function checkForUpdates(manual) {
   if (checking) return;
   checking = true;
   try {
-    // /releases/latest redirects to /releases/tag/vX.Y.Z (no API rate limit)
-    const r = await fetch(`https://github.com/${GH_REPO}/releases/latest`, { redirect: 'manual', headers: { 'User-Agent': 'GNHS-ECR' } });
-    const loc = r.headers.get('location') || '';
-    const m = loc.match(/\/tag\/v?([0-9.]+)$/);
-    if (!m) throw new Error('Could not find the latest release');
-    const latest = m[1];
+    const latest = await getLatestVersion();
     const current = currentVersion();
     if (cmpVer(latest, current) <= 0) {
       if (manual) await box({ type: 'info', message: 'You are up to date.', detail: 'Version ' + current });
       return;
     }
-    const zr = await fetch(`https://github.com/${GH_REPO}/releases/download/v${latest}/${ASSET}`, { headers: { 'User-Agent': 'GNHS-ECR' } });
-    if (!zr.ok) throw new Error('Download failed (' + zr.status + ')');
-    const buf = Buffer.from(await zr.arrayBuffer());
-
-    const AdmZip = require('adm-zip');
-    const tmp = pendDir() + '.tmp';
-    fs.rmSync(tmp, { recursive: true, force: true });
-    new AdmZip(buf).extractAllTo(tmp, true);
-    if (!fs.existsSync(path.join(tmp, 'index.html'))) throw new Error('Update package is invalid');
-    fs.writeFileSync(path.join(tmp, '.version'), latest);
-    fs.rmSync(pendDir(), { recursive: true, force: true });
-    fs.renameSync(tmp, pendDir());
-
+    await downloadUpdate(latest);
     const res = await box({
       type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
       message: 'GNHS ECR ' + latest + ' is ready.',
@@ -158,7 +181,6 @@ app.whenReady().then(() => {
   applyPendingUpdate();
   buildMenu();
   createWindow();
-  setTimeout(() => checkForUpdates(false), 8000);
 });
 app.on('window-all-closed', () => app.quit());
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) { closing = false; createWindow(); } });

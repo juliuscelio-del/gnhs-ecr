@@ -11,6 +11,11 @@ const api = {
   saveDone: () => ipcRenderer.send('ecr:save-done'),
 };
 
+// Auto-update (used by the update banner inside the page)
+api.checkUpdate = () => ipcRenderer.invoke('ecr:check-update');
+api.installUpdate = (version) => ipcRenderer.invoke('ecr:install-update', version);
+api.restartApp = () => ipcRenderer.invoke('ecr:restart');
+
 // Licence functions are only exposed when a licence module is installed (see main.js).
 // Without them the page skips the activation screen.
 if (ipcRenderer.sendSync('ecr:has-license')) {
