@@ -34,10 +34,19 @@ const result = await build({
 // An inline <script> must never contain a literal "</script".
 const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 
-const html = fs.readFileSync(src, 'utf8');
+let html = fs.readFileSync(src, 'utf8');
+// If the HTML already has an older React bundle in it (a previously BUILT file), remove that
+// bundle first, so the result is always "original + the current React layer", never two layers.
+const OLD_START = '<div id="react-root"></div>\n<script id="react-shell-bundle">';
 if (html.includes('id="react-shell-bundle"')) {
-  console.error('That HTML already contains the React bundle. Point --src at the ORIGINAL file.');
-  process.exit(1);
+  const a = html.indexOf(OLD_START);
+  const b = a < 0 ? -1 : html.indexOf('</script>\n', a);
+  if (a < 0 || b < 0) {
+    console.error('The HTML contains an old React bundle in an unexpected shape. Point --src at the ORIGINAL file.');
+    process.exit(1);
+  }
+  html = html.slice(0, a) + html.slice(b + '</script>\n'.length);
+  console.log('Note: removed the older React bundle found in the source HTML before building.');
 }
 // The embedded libraries in the original also contain "</body>" inside strings; the real one is the last.
 const at = html.lastIndexOf('</body>');
