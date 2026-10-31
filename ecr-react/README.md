@@ -19,19 +19,29 @@ gnhs-ecr/
 └─ .github/workflows/
 ```
 
-## Features
+## Features (mirrors ElectronicClassRecordFINAL.html)
 
 | Feature | Status |
 |---------|--------|
-| Multiple sections (Grade 7–10) | ✅ |
-| Boys / Girls roster editor | ✅ |
-| Quarterly grade sheets (Q1–Q4) | ✅ |
-| Written Works / Performance Tasks / QA | ✅ |
-| Highest possible score row | ✅ |
-| Automatic % + quarterly grade | ✅ |
-| Configurable component weights | ✅ |
-| Teacher profile | ✅ |
-| Data saved in browser (`localStorage`) | ✅ |
+| Sections (Grade 7-10) | done (10 defaults; HTML also has 5 spare "New Section" slots - todo) |
+| Boys / Girls roster editor | done |
+| Subject tabs per section (Math, Science) | done |
+| 3 terms (1st / 2nd / 3rd) | done |
+| WW 1-5, PT 1-3, QA = ST1/ST2/TE | done |
+| Total / PS / WS per component | done |
+| Per-subject weights (English 30/50/20, TLE & MAPEH 20/60/20, ...) | done |
+| DepEd transmutation table (Initial -> Final grade) | done |
+| Descriptors (Advancing ... Emerging) | done |
+| Highest-possible-score row + over-max rejection | done |
+| Avg Grade & MPS tab | todo |
+| Test Analysis tab | todo |
+| Grading Scale tab | todo |
+| Teacher login / change password | todo |
+| PDF export / print layout | todo |
+| JSON export, IndexedDB storage, MAPEH sub-components | todo |
+
+`src/utils/grades.js` is verified against the HTML's own `calcGrades`, `transmute`
+and `getDescriptor` (2,000 random score sets + every 0.01 step from 0-100: 0 mismatches).
 
 ## Development
 

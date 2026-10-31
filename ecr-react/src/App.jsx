@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import SectionTabs from './components/SectionTabs'
 import QuarterTabs from './components/QuarterTabs'
+import SubjectTabs from './components/SubjectTabs'
 import GradeSheet from './components/GradeSheet'
 import RosterModal from './components/RosterModal'
 import ProfileModal from './components/ProfileModal'
 import WeightsModal from './components/WeightsModal'
-import { DEFAULT_SECTIONS, SECTION_KEYS } from './data/sections'
+import { DEFAULT_SECTIONS, SECTION_KEYS, DEFAULT_SUBJECTS, TERMS, TERM_LABELS } from './data/sections'
 import {
   loadSections,
   saveSections,
@@ -21,16 +22,16 @@ import {
   clearAllData,
 } from './utils/storage'
 
-const QUARTERS = ['q1', 'q2', 'q3', 'q4']
 
 export default function App() {
   // ----- Global state -----
   const [sections, setSections] = useState(() => loadSections() || { ...DEFAULT_SECTIONS })
   const [activeSection, setActiveSection] = useState(SECTION_KEYS[0])
+  const [activeSubject, setActiveSubject] = useState(DEFAULT_SUBJECTS[0])
   const [activeQuarter, setActiveQuarter] = useState('q1')
   const [classList, setClassList] = useState({ male: [], female: [] })
   const [scores, setScores] = useState({})
-  const [weights, setWeights] = useState(() => loadWeights() || { ww: 40, pt: 40, qa: 20 })
+  const [weights, setWeights] = useState(() => loadWeights() || {})
   const [profile, setProfile] = useState(() => loadTeacherProfile())
 
   // Modals
@@ -43,9 +44,9 @@ export default function App() {
   useEffect(() => {
     const list = loadClassList(activeSection)
     setClassList(list)
-    const sc = loadScores(activeSection, activeQuarter)
+    const sc = loadScores(activeSection, activeSubject, activeQuarter)
     setScores(sc)
-  }, [activeSection, activeQuarter])
+  }, [activeSection, activeSubject, activeQuarter])
 
   // ----- Helpers -----
   const showStatus = useCallback((text, ok = true) => {
@@ -68,7 +69,7 @@ export default function App() {
           [field]: value,
         },
       }
-      saveScores(activeSection, activeQuarter, next)
+      saveScores(activeSection, activeSubject, activeQuarter, next)
       return next
     })
   }
@@ -82,7 +83,7 @@ export default function App() {
           [field]: value,
         },
       }
-      saveScores(activeSection, activeQuarter, next)
+      saveScores(activeSection, activeSubject, activeQuarter, next)
       return next
     })
   }
@@ -117,7 +118,7 @@ export default function App() {
     setSections({ ...DEFAULT_SECTIONS })
     setClassList({ male: [], female: [] })
     setScores({})
-    setWeights({ ww: 40, pt: 40, qa: 20 })
+    setWeights({})
     setProfile(loadTeacherProfile())
     showStatus('All data cleared', false)
   }
@@ -143,8 +144,14 @@ export default function App() {
           onChange={setActiveSection}
         />
 
+        <SubjectTabs
+          subjects={DEFAULT_SUBJECTS}
+          active={activeSubject}
+          onChange={setActiveSubject}
+        />
+
         <QuarterTabs
-          quarters={QUARTERS}
+          quarters={TERMS}
           active={activeQuarter}
           onChange={setActiveQuarter}
         />
@@ -158,10 +165,11 @@ export default function App() {
         <GradeSheet
           sectionKey={activeSection}
           sectionLabel={currentSectionLabel}
-          quarter={activeQuarter}
+          subjectKey={activeSubject}
+          termLabel={TERM_LABELS[activeQuarter]}
           classList={classList}
           scores={scores}
-          weights={weights}
+          weightsMap={weights}
           onScoreChange={handleScoreChange}
           onMaxChange={handleMaxChange}
           onOpenRoster={() => setShowRoster(true)}
@@ -190,7 +198,8 @@ export default function App() {
 
       {showWeights && (
         <WeightsModal
-          weights={weights}
+          weightsMap={weights}
+          subjects={DEFAULT_SUBJECTS}
           onSave={handleSaveWeights}
           onClose={() => setShowWeights(false)}
         />

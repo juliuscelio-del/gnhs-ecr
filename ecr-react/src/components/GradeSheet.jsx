@@ -1,256 +1,189 @@
-import { useMemo } from 'react'
-import {
-  componentPercentage,
-  computeQuarterlyGrade,
-  getRemarks,
-  formatGrade,
-  isPassing,
-} from '../utils/grades'
-import { SCORE_COLUMNS } from '../data/sections'
+import { calcGrades, calcMaxTotals, exceedsMax, getDescriptor, displayVal } from '../utils/grades'
+import { SCORE_COLUMNS, QA_LABELS, SUBJECT_OPTIONS, getWeightsForSubject } from '../data/sections'
 
-function StudentRow({ student, gender, index, scores, maxes, weights, onScoreChange }) {
+const cols = (prefix, n) => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`)
+const pct = (f) => Math.round(f * 100)
+
+function ScoreInput({ value, max, onChange, placeholder }) {
+  return (
+    <input
+      className={`score-input ${exceedsMax(value, max) ? 'over-max' : ''}`}
+      type="text"
+      inputMode="decimal"
+      value={value}
+      placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+    />
+  )
+}
+
+function StudentRow({ student, index, scores, maxes, subjectKey, weightsMap, onScoreChange }) {
   const id = student.id
-  const studentScores = scores[id] || {}
+  const s = scores[id] || {}
+  const get = (k) => s[k] ?? ''
 
-  // Build score arrays
-  const wwScores = Array.from({ length: SCORE_COLUMNS.ww }, (_, i) => studentScores[`ww${i + 1}`] ?? '')
-  const ptScores = Array.from({ length: SCORE_COLUMNS.pt }, (_, i) => studentScores[`pt${i + 1}`] ?? '')
-  const qaScores = Array.from({ length: SCORE_COLUMNS.qa }, (_, i) => studentScores[`qa${i + 1}`] ?? '')
+  const wwKeys = cols('ww', SCORE_COLUMNS.ww)
+  const ptKeys = cols('pt', SCORE_COLUMNS.pt)
+  const qaKeys = cols('qa', SCORE_COLUMNS.qa)
 
-  const wwMax = Array.from({ length: SCORE_COLUMNS.ww }, (_, i) => maxes[`ww${i + 1}`] ?? '')
-  const ptMax = Array.from({ length: SCORE_COLUMNS.pt }, (_, i) => maxes[`pt${i + 1}`] ?? '')
-  const qaMax = Array.from({ length: SCORE_COLUMNS.qa }, (_, i) => maxes[`qa${i + 1}`] ?? '')
+  const wwVals = wwKeys.map(get)
+  const ptVals = ptKeys.map(get)
+  const qaVals = qaKeys.map(get)
 
-  const wwPct = componentPercentage(wwScores, wwMax)
-  const ptPct = componentPercentage(ptScores, ptMax)
-  const qaPct = componentPercentage(qaScores, qaMax)
-  const qGrade = computeQuarterlyGrade(wwPct, ptPct, qaPct, weights)
-  const remarks = getRemarks(qGrade)
+  const g = calcGrades(
+    wwVals, ptVals, qaVals,
+    wwKeys.map(k => maxes[k] ?? ''),
+    ptKeys.map(k => maxes[k] ?? ''),
+    qaKeys.map(k => maxes[k] ?? ''),
+    subjectKey, weightsMap,
+  )
 
-  const handleChange = (field, value) => {
-    // basic validation: only numbers or empty
-    if (value !== '' && isNaN(parseFloat(value))) return
-    onScoreChange(id, field, value)
+  // HTML: Final + Descriptor stay blank until the row has a name AND at least one score
+  const hasName = (student.name || '').trim() !== ''
+  const hasAnyScore = [...wwVals, ...ptVals, ...qaVals].some(v => v !== '')
+  const showFinal = hasName && hasAnyScore && g.final !== ''
+  const desc = showFinal ? getDescriptor(g.final) : { text: '', cls: '' }
+
+  const change = (key, max) => (value) => {
+    if (value !== '' && isNaN(Number(value))) return
+    // HTML rejects scores above the highest possible score
+    if (exceedsMax(value, max)) return
+    onScoreChange(id, key, value)
   }
+
+  const renderGroup = (keys, label, total, ps, ws) => (
+    <>
+      {keys.map(k => (
+        <td key={k}>
+          <ScoreInput value={get(k)} max={maxes[k]} onChange={change(k, maxes[k])} />
+        </td>
+      ))}
+      <td className="col-total">{displayVal(total)}</td>
+      <td>{displayVal(ps)}</td>
+      <td>{displayVal(ws)}</td>
+    </>
+  )
 
   return (
     <tr data-role="student">
-      <td style={{ fontWeight: 600, color: '#64748b', width: 36 }}>{index + 1}</td>
+      <td style={{ fontWeight: 600, color: '#64748b' }}>{index + 1}</td>
       <td className="name-cell">{student.name || '—'}</td>
-
-      {/* Written Works */}
-      {wwScores.map((val, i) => (
-        <td key={`ww${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={val}
-            onChange={e => handleChange(`ww${i + 1}`, e.target.value)}
-          />
-        </td>
-      ))}
-      <td style={{ fontWeight: 600 }}>{wwPct != null ? formatGrade(wwPct, 1) : ''}</td>
-
-      {/* Performance Tasks */}
-      {ptScores.map((val, i) => (
-        <td key={`pt${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={val}
-            onChange={e => handleChange(`pt${i + 1}`, e.target.value)}
-          />
-        </td>
-      ))}
-      <td style={{ fontWeight: 600 }}>{ptPct != null ? formatGrade(ptPct, 1) : ''}</td>
-
-      {/* Quarterly Assessment */}
-      {qaScores.map((val, i) => (
-        <td key={`qa${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={val}
-            onChange={e => handleChange(`qa${i + 1}`, e.target.value)}
-          />
-        </td>
-      ))}
-      <td style={{ fontWeight: 600 }}>{qaPct != null ? formatGrade(qaPct, 1) : ''}</td>
-
-      {/* Quarterly Grade */}
-      <td className={qGrade != null ? (isPassing(qGrade) ? 'grade-pass' : 'grade-fail') : ''}>
-        {qGrade != null ? formatGrade(qGrade, 2) : ''}
+      {renderGroup(wwKeys, 'ww', g.wwTotal, g.wwPS, g.wwWS)}
+      {renderGroup(ptKeys, 'pt', g.ptTotal, g.ptPS, g.ptWS)}
+      {renderGroup(qaKeys, 'qa', g.qaTotal, g.qaPS, g.qaWS)}
+      <td className="grade-initial">{displayVal(g.init)}</td>
+      <td className={showFinal ? (g.final >= 75 ? 'grade-final' : 'grade-low') : ''}>
+        {showFinal ? g.final : ''}
       </td>
-      <td style={{ fontSize: 12 }}>{remarks.text}</td>
+      <td className={desc.cls}>{desc.text}</td>
     </tr>
   )
 }
 
 function MaxRow({ maxes, onMaxChange }) {
-  const handle = (field, value) => {
-    if (value !== '' && isNaN(parseFloat(value))) return
-    onMaxChange(field, value)
+  const wwKeys = cols('ww', SCORE_COLUMNS.ww)
+  const ptKeys = cols('pt', SCORE_COLUMNS.pt)
+  const qaKeys = cols('qa', SCORE_COLUMNS.qa)
+  const totals = calcMaxTotals(
+    wwKeys.map(k => maxes[k] ?? ''),
+    ptKeys.map(k => maxes[k] ?? ''),
+    qaKeys.map(k => maxes[k] ?? ''),
+  )
+  const handle = (key) => (value) => {
+    if (value !== '' && isNaN(Number(value))) return
+    onMaxChange(key, value)
   }
-
+  const group = (keys, total) => (
+    <>
+      {keys.map(k => (
+        <td key={k}>
+          <ScoreInput value={maxes[k] ?? ''} onChange={handle(k)} placeholder="—" />
+        </td>
+      ))}
+      <td className="col-total">{total || ''}</td>
+      <td></td>
+      <td></td>
+    </>
+  )
   return (
-    <tr style={{ background: '#f1f5f9' }}>
+    <tr className="max-row">
       <td></td>
-      <td className="name-cell" style={{ fontWeight: 700, fontSize: 12, color: '#64748b' }}>
-        HIGHEST POSSIBLE SCORE
-      </td>
-      {Array.from({ length: SCORE_COLUMNS.ww }, (_, i) => (
-        <td key={`mww${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={maxes[`ww${i + 1}`] ?? ''}
-            onChange={e => handle(`ww${i + 1}`, e.target.value)}
-            placeholder="—"
-          />
-        </td>
-      ))}
-      <td></td>
-      {Array.from({ length: SCORE_COLUMNS.pt }, (_, i) => (
-        <td key={`mpt${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={maxes[`pt${i + 1}`] ?? ''}
-            onChange={e => handle(`pt${i + 1}`, e.target.value)}
-            placeholder="—"
-          />
-        </td>
-      ))}
-      <td></td>
-      {Array.from({ length: SCORE_COLUMNS.qa }, (_, i) => (
-        <td key={`mqa${i}`}>
-          <input
-            className="score-input"
-            type="text"
-            inputMode="decimal"
-            value={maxes[`qa${i + 1}`] ?? ''}
-            onChange={e => handle(`qa${i + 1}`, e.target.value)}
-            placeholder="—"
-          />
-        </td>
-      ))}
-      <td></td>
-      <td></td>
-      <td></td>
+      <td className="name-cell">HIGHEST POSSIBLE SCORE</td>
+      {group(wwKeys, totals.ww)}
+      {group(ptKeys, totals.pt)}
+      {group(qaKeys, totals.qa)}
+      <td></td><td></td><td></td>
     </tr>
   )
 }
 
 export default function GradeSheet({
-  sectionLabel,
-  quarter,
-  classList,
-  scores,
-  weights,
-  onScoreChange,
-  onMaxChange,
-  onOpenRoster,
+  sectionLabel, subjectKey, termLabel, classList, scores, weightsMap,
+  onScoreChange, onMaxChange, onOpenRoster,
 }) {
   const maxes = scores.__max || {}
   const male = classList.male || []
   const female = classList.female || []
   const hasStudents = male.length + female.length > 0
+  const w = getWeightsForSubject(subjectKey, weightsMap)
 
-  const quarterLabel = {
-    q1: '1st Quarter',
-    q2: '2nd Quarter',
-    q3: '3rd Quarter',
-    q4: '4th Quarter',
-  }[quarter] || quarter
+  const head = (keys, labels) => keys.map((k, i) => <th key={k} className="subhead">{labels ? labels[i] : i + 1}</th>)
+  const subHeads = (
+    <>
+      <th className="subhead">Total</th>
+      <th className="subhead">PS</th>
+      <th className="subhead">WS</th>
+    </>
+  )
 
-  // Build header columns
-  const wwHeaders = Array.from({ length: SCORE_COLUMNS.ww }, (_, i) => `WW${i + 1}`)
-  const ptHeaders = Array.from({ length: SCORE_COLUMNS.pt }, (_, i) => `PT${i + 1}`)
-  const qaHeaders = Array.from({ length: SCORE_COLUMNS.qa }, (_, i) => `QA${i + 1}`)
+  const table = (list, label, cls) => list.length > 0 && (
+    <>
+      <tr><td colSpan={999} className={`gender-header ${cls}`}>{label} ({list.length})</td></tr>
+      {list.map((st, i) => (
+        <StudentRow
+          key={st.id} student={st} index={i} scores={scores} maxes={maxes}
+          subjectKey={subjectKey} weightsMap={weightsMap} onScoreChange={onScoreChange}
+        />
+      ))}
+    </>
+  )
 
   return (
     <div className="card">
       <div className="card-title">
-        <span>
-          {sectionLabel} · {quarterLabel}
-        </span>
-        <button className="btn-ghost no-print" onClick={onOpenRoster}>
-          ✎ Edit Roster
-        </button>
+        <span>{sectionLabel} · {SUBJECT_OPTIONS[subjectKey] || subjectKey} · {termLabel}</span>
+        <button className="btn-ghost no-print" onClick={onOpenRoster}>✎ Edit Roster</button>
       </div>
 
       {!hasStudents ? (
         <div className="empty-state">
           <p>No students in this section yet.</p>
-          <button className="btn-primary" onClick={onOpenRoster}>
-            Add Students to Roster
-          </button>
+          <button className="btn-primary" onClick={onOpenRoster}>Add Students to Roster</button>
         </div>
       ) : (
         <div className="table-wrap">
           <table className="grade-table">
             <thead>
               <tr>
-                <th rowSpan={2}>#</th>
+                <th rowSpan={2}>No.</th>
                 <th rowSpan={2}>Learner&apos;s Name</th>
-                <th colSpan={SCORE_COLUMNS.ww + 1}>Written Works ({weights.ww}%)</th>
-                <th colSpan={SCORE_COLUMNS.pt + 1}>Performance Tasks ({weights.pt}%)</th>
-                <th colSpan={SCORE_COLUMNS.qa + 1}>Quarterly Assessment ({weights.qa}%)</th>
-                <th rowSpan={2}>Quarterly<br />Grade</th>
-                <th rowSpan={2}>Remarks</th>
+                <th colSpan={SCORE_COLUMNS.ww + 3} className="group-header">Written Works ({pct(w.ww)}%)</th>
+                <th colSpan={SCORE_COLUMNS.pt + 3} className="group-header">Performance Task ({pct(w.pt)}%)</th>
+                <th colSpan={SCORE_COLUMNS.qa + 3} className="group-header">Quarterly Assessment ({pct(w.qa)}%)</th>
+                <th rowSpan={2}>Initial<br />Grade</th>
+                <th rowSpan={2}>Final<br />Grade</th>
+                <th rowSpan={2}>Descriptor</th>
               </tr>
               <tr>
-                {wwHeaders.map(h => <th key={h} className="subhead">{h}</th>)}
-                <th className="subhead">%</th>
-                {ptHeaders.map(h => <th key={h} className="subhead">{h}</th>)}
-                <th className="subhead">%</th>
-                {qaHeaders.map(h => <th key={h} className="subhead">{h}</th>)}
-                <th className="subhead">%</th>
+                {head(cols('ww', SCORE_COLUMNS.ww))}{subHeads}
+                {head(cols('pt', SCORE_COLUMNS.pt))}{subHeads}
+                {head(cols('qa', SCORE_COLUMNS.qa), QA_LABELS)}{subHeads}
               </tr>
             </thead>
             <tbody>
               <MaxRow maxes={maxes} onMaxChange={onMaxChange} />
-
-              {male.length > 0 && (
-                <tr>
-                  <td colSpan={999} className="gender-header">♂ Boys ({male.length})</td>
-                </tr>
-              )}
-              {male.map((s, i) => (
-                <StudentRow
-                  key={s.id}
-                  student={s}
-                  gender="male"
-                  index={i}
-                  scores={scores}
-                  maxes={maxes}
-                  weights={weights}
-                  onScoreChange={onScoreChange}
-                />
-              ))}
-
-              {female.length > 0 && (
-                <tr>
-                  <td colSpan={999} className="gender-header female">♀ Girls ({female.length})</td>
-                </tr>
-              )}
-              {female.map((s, i) => (
-                <StudentRow
-                  key={s.id}
-                  student={s}
-                  gender="female"
-                  index={i}
-                  scores={scores}
-                  maxes={maxes}
-                  weights={weights}
-                  onScoreChange={onScoreChange}
-                />
-              ))}
+              {table(male, '♂ Male Learners', '')}
+              {table(female, '♀ Female Learners', 'female')}
             </tbody>
           </table>
         </div>

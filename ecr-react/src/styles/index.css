@@ -406,3 +406,18 @@ table.grade-table {
   .main { padding: 0; }
   .card { box-shadow: none; border: 1px solid #ccc; }
 }
+
+/* ---- Grade colours ported from the HTML version ---- */
+.max-row td { background: #fef3c7; font-weight: 700; color: #92400e; font-size: 11px; }
+td.col-total { background: #ede9fe; font-weight: 700; }
+td.grade-initial { background: #ede9fe; font-weight: 700; color: #6d28d9; }
+td.grade-final { background: #dcfce7; font-weight: 700; color: #15803d; }
+td.grade-low { background: #fee2e2; font-weight: 700; color: #b91c1c; }
+td.descriptor-advancing { background: #ede9fe; color: #6d28d9; font-weight: 700; font-size: 11px; }
+td.descriptor-benchmarking { background: #dbeafe; color: #1d4ed8; font-weight: 700; font-size: 11px; }
+td.descriptor-connecting { background: #dcfce7; color: #15803d; font-weight: 700; font-size: 11px; }
+td.descriptor-developing { background: #ffedd5; color: #9a3412; font-weight: 700; font-size: 11px; }
+td.descriptor-emerging { background: #fee2e2; color: #b91c1c; font-weight: 700; font-size: 11px; }
+.weights-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.weights-table th, .weights-table td { padding: 6px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+.grade-table th.group-header { background: #1a3a5c; color: #fff; }

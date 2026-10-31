@@ -1,9 +1,4 @@
-const LABELS = {
-  q1: '1st Quarter',
-  q2: '2nd Quarter',
-  q3: '3rd Quarter',
-  q4: '4th Quarter',
-}
+import { TERM_LABELS } from '../data/sections'
 
 export default function QuarterTabs({ quarters, active, onChange }) {
   return (
@@ -14,7 +9,7 @@ export default function QuarterTabs({ quarters, active, onChange }) {
           className={`quarter-tab ${active === q ? 'active' : ''}`}
           onClick={() => onChange(q)}
         >
-          {LABELS[q] || q}
+          {TERM_LABELS[q] || q}
         </button>
       ))}
     </div>

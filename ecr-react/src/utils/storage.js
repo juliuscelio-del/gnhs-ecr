@@ -49,21 +49,22 @@ export function saveClassList(sectionKey, list) {
   return saveJSON(`classlist_${sectionKey}`, list);
 }
 
-export function loadScores(sectionKey, quarter) {
-  // quarter: 'q1' | 'q2' | 'q3' | 'q4'
-  return loadJSON(`scores_${sectionKey}_${quarter}`, {});
+export function loadScores(sectionKey, subjectKey, term) {
+  // term: 'q1' | 'q2' | 'q3'
+  return loadJSON(`scores_${sectionKey}_${subjectKey}_${term}`, {});
 }
 
-export function saveScores(sectionKey, quarter, scores) {
-  return saveJSON(`scores_${sectionKey}_${quarter}`, scores);
+export function saveScores(sectionKey, subjectKey, term, scores) {
+  return saveJSON(`scores_${sectionKey}_${subjectKey}_${term}`, scores);
 }
 
+// Per-subject overrides: { MATHEMATICS: {ww:0.4, pt:0.4, qa:0.2}, ... } (fractions)
 export function loadWeights() {
-  return loadJSON('weights', null);
+  return loadJSON('subject_weights', {});
 }
 
 export function saveWeights(weights) {
-  return saveJSON('weights', weights);
+  return saveJSON('subject_weights', weights);
 }
 
 export function loadTeacherProfile() {
