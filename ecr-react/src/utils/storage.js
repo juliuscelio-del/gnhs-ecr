@@ -18,6 +18,7 @@ export function loadJSON(key, fallback = null) {
 export function saveJSON(key, value) {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    scheduleBackup();
     return true;
   } catch (e) {
     console.error('Failed to save', key, e);
@@ -28,7 +29,59 @@ export function saveJSON(key, value) {
 export function removeKey(key) {
   try {
     localStorage.removeItem(PREFIX + key);
+    scheduleBackup();
   } catch {}
+}
+
+
+// ----- Electron bridge (window.electronAPI from preload.js) -----
+// In a normal browser these are all no-ops.
+
+const api = typeof window !== 'undefined' ? window.electronAPI : undefined;
+
+function dumpAll() {
+  const out = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(PREFIX)) out[k] = localStorage.getItem(k);
+  }
+  return JSON.stringify(out);
+}
+
+let backupTimer = null;
+function scheduleBackup() {
+  if (!api) return;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => {
+    try { api.writeData(dumpAll()); } catch (e) { console.error('Backup failed', e); }
+  }, 500);
+}
+
+/** Call once before rendering. Restores from ecr-data.json if localStorage is empty. */
+export async function initStorage() {
+  if (!api) return;
+  try {
+    let hasData = false;
+    for (let i = 0; i < localStorage.length; i++) {
+      if (localStorage.key(i)?.startsWith(PREFIX)) { hasData = true; break; }
+    }
+    if (!hasData) {
+      const raw = await api.readData();
+      if (raw) {
+        const obj = JSON.parse(raw);
+        Object.entries(obj).forEach(([k, v]) => {
+          if (k.startsWith(PREFIX)) localStorage.setItem(k, v);
+        });
+      }
+    }
+    // Main process asks for a last save when the window closes.
+    api.onFinalSave(() => {
+      try { api.writeDataSync(dumpAll()); } catch (e) {}
+      api.saveDone();
+    });
+  } catch (e) {
+    console.error('initStorage failed', e);
+  }
 }
 
 // ----- Specific data helpers -----
@@ -87,4 +140,5 @@ export function clearAllData() {
     if (k && k.startsWith(PREFIX)) keysToRemove.push(k);
   }
   keysToRemove.forEach(k => localStorage.removeItem(k));
+  scheduleBackup();
 }
