@@ -5,7 +5,13 @@
 
 import { MAXN, pad, sanitizeHidden, visibilityCSS } from './roster-logic.js';
 
-export const KEYS = ['rizal', 'bonifacio', 'mabini', 'aquino', 'jacinto', 'juan-luna', 'del-pilar', 'silang', 'dagohoy'];
+// The first 9 are the original sections. 'lapu-lapu' is a fresh visible section, and 'spare-1'..'spare-5'
+// are fresh sections that start hidden: the Roster's "Add section" button reveals them one at a time.
+// These keys must match the sections that exist in ElectronicClassRecordFINAL.html.
+export const KEYS = [
+  'rizal', 'bonifacio', 'mabini', 'aquino', 'jacinto', 'juan-luna', 'del-pilar', 'silang', 'dagohoy',
+  'lapu-lapu', 'spare-1', 'spare-2', 'spare-3', 'spare-4', 'spare-5',
+];
 
 function legacy(name) {
   const fn = window[name];
