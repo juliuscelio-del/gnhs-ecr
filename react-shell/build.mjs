@@ -1,6 +1,9 @@
-// Builds ONE offline HTML file: your original ElectronicClassRecordFINAL.html with the
+// Builds ONE offline HTML file: your ElectronicClassRecordFINAL.html with the
 // React layer (login + roster) bundled inline just before </body>.
 //   node build.mjs [--src ../ElectronicClassRecordFINAL.html] [--out dist/ElectronicClassRecordFINAL.html]
+//
+// NOTE: --src must be the HTML that already contains the extra section ("lapu-lapu").
+// The roster's section list is also patched below, so you do not need to touch src/.
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +35,20 @@ const result = await build({
 });
 
 // An inline <script> must never contain a literal "</script".
-const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+let js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+
+// Extra sections the roster must know about (must also exist in the HTML).
+const EXTRA_SECTIONS = ['lapu-lapu'];
+const LAST = '"silang","dagohoy"]';
+for (const key of EXTRA_SECTIONS) {
+  if (js.includes('"' + key + '"')) continue; // already in src/, nothing to do
+  if (js.split(LAST).length !== 2) {
+    console.error('Could not find the roster section list in the React bundle to add "' + key + '".');
+    process.exit(1);
+  }
+  js = js.replace(LAST, '"silang","dagohoy","' + key + '"]');
+  console.log('Added section "' + key + '" to the roster list.');
+}
 
 let html = fs.readFileSync(src, 'utf8');
 // If the HTML already has an older React bundle in it (a previously BUILT file), remove that
