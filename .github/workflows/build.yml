@@ -27,8 +27,7 @@ jobs:
           i = html.rfind('</body>')
           if i < 0:
               raise SystemExit('No </body> tag found in the HTML file')
-          open('www/index.html', 'w', encoding='utf-8').write(html[:i] + snip + '
-' + html[i:])
+          open('www/index.html', 'w', encoding='utf-8').write(html[:i] + snip + chr(10) + html[i:])
           PY
           ls -lh www
 
