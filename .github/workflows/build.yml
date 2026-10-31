@@ -1,0 +1,191 @@
+name: Build ECR for Windows and Mac
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  REACT_DIR: ecr-react
+  VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  build-react:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install & build React app
+        working-directory: ${{ env.REACT_DIR }}
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload built React app
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-dist
+          path: ecr-react/dist
+          if-no-files-found: error
+
+  publish-html:
+    needs: build-react
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: react-dist
+          path: dist
+
+      - name: Prepare update package
+        run: |
+          cd dist
+          zip -r ../ecr-app.zip .
+          cd ..
+          ls -lh ecr-app.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: GNHS ECR v${{ env.VERSION }}
+          files: ecr-app.zip
+          generate_release_notes: true
+
+  build:
+    needs: build-react
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: Mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: react-dist
+          path: react-dist
+
+      - name: Package the app (Electron + React dist)
+        shell: bash
+        run: |
+          mkdir -p ecr/www ecr/build
+          cp -r react-dist/* ecr/www/
+
+          for ICON in icon.icns icon.ico icon.png; do
+            if [ -f "build/$ICON" ]; then
+              cp "build/$ICON" "ecr/build/$ICON"
+            elif [ -f "$ICON" ]; then
+              cp "$ICON" "ecr/build/$ICON"
+            fi
+          done
+
+          cat > ecr/package.json <<EOF
+          {
+            "name": "gnhs-ecr",
+            "version": "${{ env.VERSION }}",
+            "description": "GNHS Electronic Class Record",
+            "author": "GNHS",
+            "main": "main.js",
+            "build": {
+              "appId": "com.gnhs.ecr",
+              "productName": "GNHS ECR",
+              "directories": { "buildResources": "build" },
+              "files": ["main.js", "preload.js", "license.js", "www/**/*"],
+              "win": {
+                "icon": "build/icon.ico",
+                "target": ["nsis", "portable"]
+              },
+              "nsis": {
+                "oneClick": true,
+                "perMachine": false,
+                "artifactName": "GNHS-ECR-Setup.exe"
+              },
+              "portable": {
+                "artifactName": "GNHS-ECR-Portable.exe"
+              },
+              "mac": {
+                "icon": "build/icon.icns",
+                "target": ["dir"],
+                "category": "public.app-category.education",
+                "identity": null
+              }
+            }
+          }
+          EOF
+
+          # Use the real Electron files from the repo's electron/ folder
+          cp electron/main.js electron/preload.js ecr/
+          [ -f electron/license.js ] && cp electron/license.js ecr/ || true
+
+          cd ecr
+          npm install --save-dev electron@31 electron-builder@24
+
+          if [ "${{ matrix.name }}" = "Windows" ]; then
+            npx electron-builder --win --publish never
+          else
+            npx electron-builder --mac --x64 --arm64 --publish never
+
+            for APP in dist/mac/*.app dist/mac-arm64/*.app; do
+              [ -d "$APP" ] || continue
+              case "$APP" in
+                dist/mac-arm64/*) ARCH=arm64 ;;
+                *) ARCH=x64 ;;
+              esac
+              codesign --force --deep -s - "$APP"
+              mkdir -p "out-$ARCH"
+              cp -R "$APP" "out-$ARCH/"
+              ln -s /Applications "out-$ARCH/Applications"
+              hdiutil create -volname "GNHS ECR" -srcfolder "out-$ARCH" -ov -format UDZO "dist/GNHS-ECR-Mac-$ARCH.dmg"
+            done
+          fi
+
+      - name: List what was built
+        shell: bash
+        run: ls -la ecr/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GNHS-ECR-${{ matrix.name }}
+          path: |
+            ecr/dist/GNHS-ECR-Setup.exe
+            ecr/dist/GNHS-ECR-Portable.exe
+            ecr/dist/GNHS-ECR-Mac-*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [build, publish-html]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List files
+        run: ls -R artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: GNHS ECR v${{ env.VERSION }}
+          files: |
+            artifacts/GNHS-ECR-Windows/GNHS-ECR-Setup.exe
+            artifacts/GNHS-ECR-Windows/GNHS-ECR-Portable.exe
+            artifacts/GNHS-ECR-Mac/GNHS-ECR-Mac-*.dmg
