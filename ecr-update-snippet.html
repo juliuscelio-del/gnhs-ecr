@@ -1,0 +1,82 @@
+<!-- ECR-UPDATER:START (injected at build time; do not edit in the built file) -->
+<style>
+#ecr-upd{position:fixed;right:16px;bottom:16px;z-index:2147483000;max-width:340px;background:#1e3a5c;color:#fff;font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;border-radius:10px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.35);display:none}
+#ecr-upd b{display:block;margin-bottom:3px;font-size:14px}
+#ecr-upd-btns{margin-top:10px;display:flex;gap:8px}
+#ecr-upd-btns button{border:0;border-radius:6px;padding:6px 12px;font:600 12px system-ui,sans-serif;cursor:pointer;background:#fff;color:#1e3a5c}
+#ecr-upd-btns button:first-child{background:#22c55e;color:#fff}
+#ecr-upd-link{position:fixed;left:10px;bottom:6px;z-index:2147482999;font:11px system-ui,sans-serif;color:#64748b;opacity:.65;text-decoration:underline;cursor:pointer;background:none;border:0;padding:2px}
+#ecr-upd-link:hover{opacity:1}
+@media print{#ecr-upd,#ecr-upd-link{display:none!important}}
+</style>
+<div id="ecr-upd" role="status"><b id="ecr-upd-title"></b><span id="ecr-upd-msg"></span><div id="ecr-upd-btns"></div></div>
+<button id="ecr-upd-link" type="button">Check for updates</button>
+<script>
+(function(){
+  'use strict';
+  var VERSION = '__ECR_VERSION__';
+  var REPO = 'juliuscelio-del/gnhs-ecr';
+  var api = window.electronAPI;
+  var box = document.getElementById('ecr-upd'),
+      title = document.getElementById('ecr-upd-title'),
+      msg = document.getElementById('ecr-upd-msg'),
+      btns = document.getElementById('ecr-upd-btns'),
+      link = document.getElementById('ecr-upd-link'),
+      hideTimer = null;
+
+  function cmp(a, b) {
+    var pa = String(a).replace(/^v/, '').split('.').map(Number),
+        pb = String(b).replace(/^v/, '').split('.').map(Number);
+    for (var i = 0; i < 3; i++) { var d = (pa[i] || 0) - (pb[i] || 0); if (d) return d; }
+    return 0;
+  }
+  function hide() { box.style.display = 'none'; }
+  function mkBtn(label, fn) { var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = fn; return b; }
+  function show(t, m, buttons, autoHideMs) {
+    clearTimeout(hideTimer);
+    title.textContent = t; msg.textContent = m || '';
+    btns.textContent = '';
+    (buttons || []).forEach(function (b) { btns.appendChild(b); });
+    box.style.display = 'block';
+    if (autoHideMs) hideTimer = setTimeout(hide, autoHideMs);
+  }
+
+  async function install(latest) {
+    show('Downloading update…', 'Please wait, this takes a few seconds.', []);
+    var r = await api.installUpdate(latest);
+    if (!r || !r.ok) { show('Update failed', (r && r.error) || 'Unknown error', [mkBtn('OK', hide)]); return; }
+    show('Update ready', 'Restart to finish updating. Your class records are kept.',
+      [mkBtn('Restart now', function () { api.restartApp(); }), mkBtn('Later', hide)]);
+  }
+
+  async function check(manual) {
+    try {
+      if (api && api.checkUpdate) {                       // installed app
+        var r = await api.checkUpdate();
+        if (!r || !r.ok) throw new Error((r && r.error) || 'Check failed');
+        if (!r.available) { if (manual) show('You are up to date', 'Version ' + r.current, [], 3500); return; }
+        show('Update available', 'Version ' + r.latest + ' is ready (you have ' + r.current + '). Your class records are kept.',
+          [mkBtn('Update now', function () { install(r.latest); }), mkBtn('Later', hide)]);
+      } else {                                            // opened in a normal browser
+        if (VERSION.indexOf('__') === 0) {
+          if (manual) show('Updates', 'Update checks work in the released version of the app.', [mkBtn('OK', hide)]);
+          return;
+        }
+        var res = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest');
+        if (!res.ok) throw new Error('GitHub responded ' + res.status);
+        var latest = String((await res.json()).tag_name || '').replace(/^v/, '');
+        if (cmp(latest, VERSION) > 0) {
+          show('Update available', 'Version ' + latest + ' is available (you have ' + VERSION + ').',
+            [mkBtn('Download', function () { window.open('https://github.com/' + REPO + '/releases/latest', '_blank'); }), mkBtn('Later', hide)]);
+        } else if (manual) show('You are up to date', 'Version ' + VERSION, [], 3500);
+      }
+    } catch (e) {
+      if (manual) show('Could not check for updates', String(e && e.message || e), [mkBtn('OK', hide)]);
+    }
+  }
+
+  link.addEventListener('click', function () { check(true); });
+  setTimeout(function () { check(false); }, 10000);      // silent check shortly after start
+})();
+</script>
+<!-- ECR-UPDATER:END -->
