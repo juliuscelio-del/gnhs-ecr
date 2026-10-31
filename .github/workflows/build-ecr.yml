@@ -9,7 +9,6 @@ permissions:
   contents: write
 
 env:
-  # New React app lives in react-shell/
   REACT_DIR: react-shell
   VERSION: 1.0.${{ github.run_number }}
 
@@ -25,13 +24,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: react-shell/package-lock.json
+          # Remove cache-dependency-path until package-lock.json exists
+          # cache: npm
+          # cache-dependency-path: react-shell/package-lock.json
 
       - name: Install & build React app
         working-directory: ${{ env.REACT_DIR }}
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm install
           npm run build
 
       - name: Upload built React app
@@ -42,7 +42,7 @@ jobs:
           if-no-files-found: error
 
   # --------------------------------------------------
-  # 2. Fast online update (publish the built HTML + assets)
+  # 2. Fast online update
   # --------------------------------------------------
   publish-html:
     needs: build-react
@@ -57,8 +57,6 @@ jobs:
 
       - name: Prepare update package
         run: |
-          # Create a single zip that contains index.html + assets
-          # so the Electron app can download and extract it later
           cd dist
           zip -r ../ecr-app.zip .
           cd ..
@@ -115,7 +113,6 @@ jobs:
           done
           ls -la ecr/build
 
-          # package.json for electron-builder
           cat > ecr/package.json <<EOF
           {
             "name": "gnhs-ecr",
@@ -150,7 +147,6 @@ jobs:
           }
           EOF
 
-          # Simple Electron main process (loads the React app)
           cat > ecr/main.js <<'EOF'
           const { app, BrowserWindow, Menu } = require('electron');
           const path = require('path');
@@ -170,7 +166,6 @@ jobs:
               }
             });
 
-            // Load the Vite-built React app
             win.loadFile(path.join(__dirname, 'www', 'index.html'));
 
             win.once('ready-to-show', () => {
@@ -214,7 +209,6 @@ jobs:
           else
             npx electron-builder --mac --x64 --arm64 --publish never
 
-            # Ad-hoc sign + create DMG (same as before)
             for APP in dist/mac/*.app dist/mac-arm64/*.app; do
               [ -d "$APP" ] || continue
               case "$APP" in
@@ -243,7 +237,7 @@ jobs:
           if-no-files-found: error
 
   # --------------------------------------------------
-  # 4. Attach installers to the same GitHub Release
+  # 4. Attach installers to the GitHub Release
   # --------------------------------------------------
   release:
     needs: [build, publish-html]
