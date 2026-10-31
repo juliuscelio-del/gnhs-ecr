@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MAXN, buildCSV, cleanName, countFilled, findDuplicates, pad, parseCSV, planImport, toArr, tooMany, trimTail,
+  MAXN, buildCSV, canHide, cleanName, countFilled, findDuplicates, hideKey, pad, parseCSV, planImport,
+  sanitizeHidden, showKey, toArr, tooMany, trimTail, visibilityCSS, visibleKeys,
 } from '../src/roster-logic.js';
 
 const SECTIONS = [
@@ -67,4 +68,32 @@ test('planImport reports problems like the original', () => {
 test('"Grade 7" and boys/girls/m/f aliases are accepted', () => {
   const r = planImport(parseCSV('Grade,Section,Sex,Name\nGrade 7,rizal,M,A\nGrade 7,RIZAL,girls,B\n'), SECTIONS);
   assert.deepEqual(r.got.rizal, { male: ['A'], female: ['B'] });
+});
+
+const ALL = ['rizal', 'bonifacio', 'mabini'];
+
+test('hide / restore sections', () => {
+  assert.deepEqual(sanitizeHidden(['rizal', 'rizal', 'nope', 'x"y'], ALL), ['rizal']);
+  assert.deepEqual(sanitizeHidden(null, ALL), []);
+  assert.deepEqual(hideKey(['rizal'], 'mabini'), ['rizal', 'mabini']);
+  assert.deepEqual(hideKey(['rizal'], 'rizal'), ['rizal']);
+  assert.deepEqual(showKey(['rizal', 'mabini'], 'rizal'), ['mabini']);
+  assert.deepEqual(visibleKeys(ALL, ['rizal']), ['bonifacio', 'mabini']);
+});
+
+test('the last visible section cannot be deleted', () => {
+  assert.equal(canHide(ALL, [], 'rizal'), true);
+  assert.equal(canHide(ALL, ['rizal'], 'bonifacio'), true);
+  assert.equal(canHide(ALL, ['rizal', 'bonifacio'], 'mabini'), false);
+  assert.equal(canHide(ALL, ['rizal'], 'rizal'), false);
+});
+
+test('visibilityCSS targets tabs, panel, options and score blocks only for hidden keys', () => {
+  assert.equal(visibilityCSS([]), '');
+  const css = visibilityCSS(['juan-luna']);
+  assert.match(css, /showSubjectTab\('juan-luna'/);
+  assert.match(css, /#juan-luna-section/);
+  assert.match(css, /option\[value="juan-luna"\]/);
+  assert.match(css, /display:none!important/);
+  assert.equal(visibilityCSS(['bad key']), '');
 });

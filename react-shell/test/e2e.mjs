@@ -136,13 +136,19 @@ await closeProfileIfOpen(p);
 console.log('Roster');
 const before = await idb(p, 'ecr_classlist');
 const embedded = await p.evaluate(() => window.ECR_EMBEDDED_CLASSLIST);
-const baseline = before || embedded;
+const baseline = JSON.parse(JSON.stringify(before || embedded || {}));
+// The embedded list can be empty (no learners shipped in the HTML): treat missing sections as empty.
+['rizal', 'bonifacio', 'mabini', 'aquino', 'jacinto', 'juan-luna', 'del-pilar', 'silang', 'dagohoy'].forEach((k) => {
+  baseline[k] = baseline[k] || { male: [], female: [] };
+  baseline[k].male = baseline[k].male || [];
+  baseline[k].female = baseline[k].female || [];
+});
 await p.click('button:has-text("Roster")');
 await p.waitForSelector('[data-testid=rx-roster]');
-assert.equal(await p.locator('.rx-side button').count(), 9);
+assert.equal(await p.locator('.rx-side button[data-testid^="rx-sec-"]').count(), 9);
 ok('toolbar Roster button opens the React panel with 9 sections');
 
-const firstKey = await p.$eval('.rx-side button', (b) => b.dataset.testid.replace('rx-sec-', ''));
+const firstKey = await p.$eval('.rx-side button[data-testid^="rx-sec-"]', (b) => b.dataset.testid.replace('rx-sec-', ''));
 const nBoys = baseline[firstKey].male.filter(Boolean).length;
 assert.match(await p.textContent('[data-testid=rx-col-male] .rx-count'), new RegExp('\\(' + nBoys + ' / 30\\)'));
 const firstBoy = await p.inputValue('[data-testid=rx-col-male] .rx-row input');
@@ -196,7 +202,8 @@ for (const k of Object.keys(snapshot)) {
 ok('original app can import the CSV exported by React (same learners)');
 
 // React import of a CSV (replace one section), then verify
-const csv = '\uFEFFGrade,Section,Sex,Name\r\n7,Rizal,Boy,"DELA CRUZ, JUAN"\r\n7,Rizal,Girl,MARIA SANTOS\r\n9,Nowhere,Boy,X\r\n';
+const rz = await p.evaluate(() => window.ECR_SEC.rizal);
+const csv = '\uFEFFGrade,Section,Sex,Name\r\n' + rz.g + ',' + rz.n + ',Boy,"DELA CRUZ, JUAN"\r\n' + rz.g + ',' + rz.n + ',Girl,MARIA SANTOS\r\n9,Nowhere,Boy,X\r\n';
 fs.writeFileSync('/tmp/one-section.csv', csv);
 await p.setInputFiles('[data-testid=rx-import]', '/tmp/one-section.csv');
 await p.waitForFunction(() => /Imported 1 section/.test(document.querySelector('[data-testid=rx-msg]')?.textContent || ''));
@@ -211,7 +218,7 @@ await p.fill('[data-testid=rx-col-male] .rx-row >> nth=0 >> input', 'changed');
 let asked = 0;
 p.removeAllListeners('dialog');
 p.on('dialog', (d) => { asked++; d.dismiss(); });
-await p.click('.rx-side button >> nth=2');
+await p.click('.rx-side button[data-testid^="rx-sec-"] >> nth=2');
 assert.equal(asked, 1);
 assert.ok(await p.locator('.rx-side button.rx-on').first().getAttribute('data-testid').then((t) => t.includes(firstKey)));
 ok('unsaved changes are protected when switching section');
@@ -229,6 +236,80 @@ await p.waitForFunction(() => document.documentElement.classList.contains('rx-re
 const afterReload = await idb(p, 'ecr_classlist');
 assert.deepEqual(afterReload.rizal.female.filter(Boolean), ['MARIA SANTOS']);
 ok('roster survives a reload');
+
+
+// ---- delete (hide) and add (restore) sections
+console.log('Add / Delete section');
+const SEC = '.rx-side button[data-testid^="rx-sec-"]';
+const tabVisible = (pg, key) => pg.evaluate((k) => { const b = document.querySelector(`button[onclick*="showSubjectTab('${k}'"]`); return !!b && getComputedStyle(b).display !== 'none'; }, key);
+const panelVisible = (pg, key) => pg.evaluate((k) => getComputedStyle(document.getElementById(k + '-section')).display !== 'none', key);
+const hiddenInIdb = async (pg) => (await idb(pg, 'ecr_hidden_sections')) || [];
+const dataBefore = await idb(p, 'ecr_classlist');
+await closeProfileIfOpen(p);
+
+await p.click('button:has-text("Roster")');
+await p.waitForSelector('[data-testid=rx-roster]');
+await p.click('[data-testid=rx-sec-mabini]');
+assert.ok(await tabVisible(p, 'mabini'));
+await p.click('[data-testid=rx-delete-section]');
+await p.waitForFunction(() => /Deleted/.test(document.querySelector('[data-testid=rx-msg]')?.textContent || ''));
+assert.equal(await p.locator(SEC).count(), 8);
+assert.equal(await p.locator('[data-testid=rx-sec-mabini]').count(), 0);
+assert.equal(await tabVisible(p, 'mabini'), false);
+assert.equal(await panelVisible(p, 'mabini'), false);
+assert.equal(await p.evaluate(() => document.querySelector('#clear-section option[value="mabini"]').disabled), true);
+assert.deepEqual(await hiddenInIdb(p), ['mabini']);
+assert.deepEqual(await idb(p, 'ecr_classlist'), dataBefore);
+ok('Delete hides the section (sidebar, tabs, panel, dropdown) and keeps all learner data');
+
+await p.keyboard.press('Escape');
+await p.reload();
+await p.waitForFunction(() => document.documentElement.classList.contains('rx-ready'));
+await closeProfileIfOpen(p);
+assert.equal(await tabVisible(p, 'mabini'), false);
+assert.ok(await tabVisible(p, 'rizal'));
+ok('a deleted section stays hidden after reload');
+
+await p.click('button:has-text("Roster")');
+await p.waitForSelector('[data-testid=rx-roster]');
+assert.equal(await p.locator(SEC).count(), 8);
+await p.click('[data-testid=rx-add-section]');
+await p.click('[data-testid=rx-pick-mabini]');
+await p.waitForFunction(() => /Added/.test(document.querySelector('[data-testid=rx-msg]')?.textContent || ''));
+assert.equal(await p.locator(SEC).count(), 9);
+assert.ok(await tabVisible(p, 'mabini'));
+assert.deepEqual(await hiddenInIdb(p), []);
+assert.match(await p.getAttribute('[data-testid=rx-sec-mabini]', 'class') || '', /rx-on/);
+ok('Add section brings the deleted section back, selected and fully visible');
+
+await p.click('[data-testid=rx-add-section]');
+assert.match(await p.textContent('[data-testid=rx-msg]'), /Nothing to add/);
+ok('Add section says so when nothing is deleted');
+
+// the last remaining section can never be deleted
+for (let i = 0; i < 8; i++) {
+  await p.click(SEC + ' >> nth=0');
+  await p.click('[data-testid=rx-delete-section]');
+  await p.waitForFunction((n) => document.querySelectorAll('.rx-side button[data-testid^="rx-sec-"]').length === n, 8 - i);
+}
+assert.equal(await p.locator(SEC).count(), 1);
+assert.equal(await p.isDisabled('[data-testid=rx-delete-section]'), true);
+const lastKey = await p.$eval(SEC, (b) => b.dataset.testid.replace('rx-sec-', ''));
+assert.ok(await tabVisible(p, lastKey));
+ok('the last section cannot be deleted (button disabled, its tab stays visible)');
+
+// restore everything for the remaining checks
+for (let i = 0; i < 8; i++) {
+  await p.click('[data-testid=rx-add-section]');
+  await p.click('.rx-side-pick >> nth=0');
+  await p.waitForFunction((n) => document.querySelectorAll('.rx-side button[data-testid^="rx-sec-"]').length === n, 2 + i);
+}
+assert.equal(await p.locator(SEC).count(), 9);
+assert.deepEqual(await hiddenInIdb(p), []);
+assert.deepEqual(await idb(p, 'ecr_classlist'), dataBefore);
+ok('all sections restored with the learner data unchanged');
+await p.keyboard.press('Escape');
+await p.waitForSelector('[data-testid=rx-roster]', { state: 'detached' });
 
 // graceful fallback: if React is gone the original modal must still open
 const legacyFile = process.env.LEGACY || path.resolve('../ElectronicClassRecordFINAL.html');

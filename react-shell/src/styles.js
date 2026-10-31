@@ -82,6 +82,12 @@ html.rx-ready #login-overlay, html.rx-ready #forgotpw-overlay { display: none !i
 .rx-col-head b { font-size: 13px; color: #0f2744; }
 .rx-count { font-size: 12px; font-weight: 700; color: #64748b; }
 .rx-count.rx-over { color: #b91c1c; }
+.rx-side .rx-side-add { margin-top: 8px; text-align: center; font-size: 13px; font-weight: 700; color: #047857; background: #ecfdf5; border: 1.5px dashed #6ee7b7; border-radius: 9px; cursor: pointer; }
+.rx-side .rx-side-add:hover { background: #d1fae5; }
+.rx-side .rx-side-pick { background: #fff; border: 1.5px solid #6ee7b7; border-radius: 9px; cursor: pointer; }
+.rx-del { padding: 8px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; color: #b91c1c; background: #fef2f2; border: 1.5px solid #fecaca; border-radius: 9px; }
+.rx-del:hover:not(:disabled) { background: #fee2e2; }
+.rx-del:disabled { opacity: .45; cursor: default; }
 .rx-tool { margin-left: auto; padding: 4px 9px; font-size: 11.5px; font-weight: 700; cursor: pointer; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px; }
 .rx-tool + .rx-tool { margin-left: 0; }
 .rx-paste { margin-bottom: 8px; padding: 8px; background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 10px; }

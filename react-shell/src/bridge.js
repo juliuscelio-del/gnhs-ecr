@@ -3,7 +3,7 @@
 // React side needs from them is funnelled through this file, so when a screen is
 // later migrated away from legacy code only this file has to change.
 
-import { MAXN, pad } from './roster-logic.js';
+import { MAXN, pad, sanitizeHidden, visibilityCSS } from './roster-logic.js';
 
 export const KEYS = ['rizal', 'bonifacio', 'mabini', 'aquino', 'jacinto', 'juan-luna', 'del-pilar', 'silang', 'dagohoy'];
 
@@ -97,6 +97,68 @@ export async function saveSectionNamesAndReload(all) {
   try { localStorage.setItem('ecr_secnames_v1', JSON.stringify(all)); } catch (e) { /* ignore */ }
   try { await ecrSet('ecr_secnames', all); } catch (e) { /* ignore */ }
   setTimeout(() => window.location.reload(), 400);
+}
+
+// ---------------------------------------------------------------- deleted (hidden) sections
+// A deleted section is only hidden: its learners and scores stay in storage, so it can be added back.
+
+const HIDDEN_LS = 'ecr_hidden_sections_v1';
+const HIDDEN_IDB = 'ecr_hidden_sections';
+
+/** Fast, synchronous read (localStorage mirror) so the page can hide sections before IndexedDB is ready. */
+export function readHiddenSync() {
+  try { return sanitizeHidden(JSON.parse(localStorage.getItem(HIDDEN_LS) || '[]'), KEYS); } catch (e) { return []; }
+}
+
+/** Authoritative read: IndexedDB first, falling back to the localStorage mirror. */
+export async function getHiddenSections() {
+  try {
+    const v = await ecrGet(HIDDEN_IDB);
+    if (Array.isArray(v)) return sanitizeHidden(v, KEYS);
+  } catch (e) { /* IndexedDB helpers not ready yet */ }
+  return readHiddenSync();
+}
+
+export async function saveHiddenSections(list) {
+  const clean = sanitizeHidden(list, KEYS);
+  try { localStorage.setItem(HIDDEN_LS, JSON.stringify(clean)); } catch (e) { /* ignore */ }
+  try { await ecrSet(HIDDEN_IDB, clean); } catch (e) { /* the localStorage mirror still works */ }
+  return clean;
+}
+
+/** Hide/show the sections in the page (tabs, panels, dropdown options) and leave a hidden tab if it was open. */
+export function applySectionVisibility(hidden) {
+  let el = document.getElementById('rx-hidden-sections');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'rx-hidden-sections';
+    document.head.appendChild(el);
+  }
+  el.textContent = visibilityCSS(hidden);
+
+  // Safari ignores display:none on <option>, so also disable/hide them directly.
+  KEYS.forEach((k) => {
+    document.querySelectorAll('option[value="' + k + '"]').forEach((o) => {
+      const off = hidden.includes(k);
+      o.hidden = off;
+      o.disabled = off;
+      if (off && o.selected && o.parentElement) {
+        const next = [...o.parentElement.options].find((x) => !x.disabled);
+        if (next) o.parentElement.value = next.value;
+      }
+    });
+  });
+
+  // If the open section was just hidden, jump to the first visible section's first tab.
+  const open = KEYS.find((k) => {
+    const p = document.getElementById(k + '-section');
+    return p && p.classList.contains('active');
+  });
+  if (open && hidden.includes(open)) {
+    const first = [...document.querySelectorAll('button[onclick*="showSubjectTab("]')]
+      .find((b) => b.offsetParent !== null);
+    if (first) first.click();
+  }
 }
 
 export { MAXN };

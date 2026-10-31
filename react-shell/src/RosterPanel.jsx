@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  KEYS, MAXN, getClassList, saveClassList, saveSectionNamesAndReload,
-  sectionLabel, sectionList, secInfo,
+  KEYS, MAXN, applySectionVisibility, getClassList, getHiddenSections, readHiddenSync, saveClassList,
+  saveHiddenSections, saveSectionNamesAndReload, sectionLabel, sectionList, secInfo,
 } from './bridge.js';
 import {
-  buildCSV, cleanName, countFilled, findDuplicates, pad, parseCSV, planImport,
-  splitLines, toArr, tooMany, trimTail,
+  buildCSV, canHide, cleanName, countFilled, findDuplicates, hideKey, pad, parseCSV, planImport,
+  showKey, splitLines, toArr, tooMany, trimTail, visibleKeys,
 } from './roster-logic.js';
 
 // The roster is positional: row N of a section is the same learner in every table and
@@ -26,21 +26,41 @@ export default function RosterPanel() {
   const [msg, setMsg] = useState(null);
   const [paste, setPaste] = useState({ male: null, female: null });
   const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState(readHiddenSync);
+  const [picking, setPicking] = useState(false);
   const fileRef = useRef(null);
   const activeRef = useRef(activeKey);
   activeRef.current = activeKey;
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
 
   const flash = (text, ok = true) => setMsg({ text, ok });
 
   const load = useCallback(async (keepKey) => {
     const d = await getClassList();
     setData(d);
-    const k = keepKey && d[keepKey] ? keepKey : KEYS[0];
+    const shown = visibleKeys(KEYS, hiddenRef.current);
+    const k = keepKey && d[keepKey] && shown.includes(keepKey) ? keepKey : shown[0] || KEYS[0];
     setActiveKey(k);
     setDraft(draftFrom(d, k));
     setDirty(false);
     setPaste({ male: null, female: null });
     return d;
+  }, []);
+
+  // Hide deleted sections in the page as soon as possible (localStorage first, then IndexedDB).
+  useEffect(() => {
+    applySectionVisibility(readHiddenSync());
+    let alive = true;
+    const sync = async () => {
+      const h = await getHiddenSections();
+      if (!alive) return;
+      setHidden(h);
+      applySectionVisibility(h);
+    };
+    sync();
+    document.addEventListener('idb-ready', sync);
+    return () => { alive = false; document.removeEventListener('idb-ready', sync); };
   }, []);
 
   // Take over the toolbar's "Roster" button. The legacy functions are kept so that if
@@ -61,7 +81,9 @@ export default function RosterPanel() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const sections = useMemo(() => (open ? sectionList() : []), [open, data]);
+  const allSections = useMemo(() => (open ? sectionList() : []), [open, data]);
+  const sections = allSections.filter((s) => !hidden.includes(s.key));
+  const deleted = allSections.filter((s) => hidden.includes(s.key));
 
   const confirmDiscard = () => !dirty || window.confirm('You have unsaved changes in this section. Discard them?');
 
@@ -76,6 +98,45 @@ export default function RosterPanel() {
     setDirty(false);
     setPaste({ male: null, female: null });
     setMsg(null);
+  }
+
+  async function persistHidden(next, activate) {
+    setBusy(true);
+    try {
+      const saved = await saveHiddenSections(next);
+      setHidden(saved);
+      hiddenRef.current = saved;
+      applySectionVisibility(saved);
+      const k = activate || visibleKeys(KEYS, saved)[0];
+      setActiveKey(k);
+      setDraft(draftFrom(data, k));
+      setDirty(false);
+      setPaste({ male: null, female: null });
+      setPicking(false);
+      return true;
+    } catch (e) {
+      flash('Could not update sections: ' + (e && e.message ? e.message : e), false);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSection() {
+    const key = activeKey;
+    if (!canHide(KEYS, hidden, key)) { flash('At least one section must stay. Add another section first.', false); return; }
+    const label = sectionLabel({ g: secInfo(key).g, n: secInfo(key).n });
+    if (dirty && !window.confirm('You have unsaved changes in this section. Delete it anyway?')) return;
+    if (!window.confirm('Delete "' + label + '" from the app?\n\nIt disappears from the tabs and menus. Its learners and scores are NOT erased, so you can bring it back with "Add section".')) return;
+    const ok = await persistHidden(hideKey(hidden, key));
+    if (ok) flash('Deleted ' + label + '. Use \u201CAdd section\u201D to bring it back.', true);
+  }
+
+  async function addSection(key) {
+    if (!confirmDiscard()) return;
+    const label = sectionLabel({ g: secInfo(key).g, n: secInfo(key).n });
+    const ok = await persistHidden(showKey(hidden, key), key);
+    if (ok) flash('Added ' + label + ' back.', true);
   }
 
   const setCell = (sex, i, value) => {
@@ -235,6 +296,7 @@ export default function RosterPanel() {
             Pick a section, edit its grade/name and learners, then Save. Rows keep their position so scores stay with the
             right learner {'\u2013'} to remove someone, clear the row and leave it blank. Maximum {MAXN} boys and {MAXN} girls per section.
             Highlighted names appear more than once.
+            Delete hides a section (nothing is erased); Add section brings it back.
           </p>
 
           <div className="rx-r-body">
@@ -248,6 +310,16 @@ export default function RosterPanel() {
                   </button>
                 );
               })}
+              <button type="button" className="rx-side-add" data-testid="rx-add-section" disabled={busy} onClick={() => {
+                if (!deleted.length) { flash('Nothing to add \u2013 every section is already in the app.', true); return; }
+                setPicking((p) => !p);
+              }}>{'\u2795'} Add section</button>
+              {picking && deleted.map((s) => (
+                <button key={s.key} type="button" className="rx-side-pick" data-testid={'rx-pick-' + s.key} onClick={() => addSection(s.key)}>
+                  <b>{sectionLabel(s)}</b>
+                  <small>Tap to add back</small>
+                </button>
+              ))}
             </nav>
 
             <div className="rx-main">
@@ -263,6 +335,12 @@ export default function RosterPanel() {
                     <div>
                       <label className="rx-label" htmlFor="rx-sname">Section name</label>
                       <input id="rx-sname" className="rx-input" maxLength={30} placeholder="e.g. Rizal" value={draft.name} onChange={(e) => { setDraft({ ...draft, name: e.target.value }); setDirty(true); }} />
+                    </div>
+                    <div>
+                      <button type="button" className="rx-del" data-testid="rx-delete-section" disabled={busy || !canHide(KEYS, hidden, activeKey)} onClick={deleteSection}
+                        title={canHide(KEYS, hidden, activeKey) ? 'Remove this section from the app (data is kept)' : 'At least one section must stay'}>
+                        {'\uD83D\uDDD1'} Delete this section
+                      </button>
                     </div>
                     <div className="rx-hint">
                       Changing the grade or section name updates every tab, table and printout. The app reloads once after saving (your scores are kept).

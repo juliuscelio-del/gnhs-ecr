@@ -31,6 +31,13 @@ npm run test:e2e     # real-browser test of the built file (needs: npx playwrigh
 | **Login** (`LoginScreen.jsx`) | Same accounts, rules and wording as before; saves in the same IndexedDB keys; finishes through the original `_completeLogin()` so the toolbar badge, session, "welcome back" device memory and the Teacher Profile popup behave the same. | If React fails to start, the original login overlay is still there and works. |
 | **Roster** (`RosterPanel.jsx`) | Replaces the 👥 Roster popup: section list with counts, 30-row boys/girls editors, *Paste list*, per-row clear, duplicate highlight, unsaved-changes guard, CSV import/export (byte-identical to the old export). Reads/writes the same `ecr_classlist` record. | The old popup is kept and comes back automatically if React errors. |
 
+**Add / Delete section** (inside the Roster panel): *Delete this section* hides the open section from the
+tabs, panels and dropdown menus; *Add section* lists the deleted ones and brings one back. Deleting never erases
+learners or scores, it only hides, so adding it back restores everything. At least one section always stays.
+The hidden list is stored under `ecr_hidden_sections` (IndexedDB) with a `ecr_hidden_sections_v1` localStorage mirror.
+The app still has 9 built-in sections; creating brand-new ones would need the hardcoded section lists in the
+original HTML to be replaced.
+
 Rows are **positional** (row 5 is the same learner in every sheet), so there is deliberately no
 "delete row" or "sort": clear the row and leave it blank, as the old popup also required.
 

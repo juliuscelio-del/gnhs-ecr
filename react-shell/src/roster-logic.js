@@ -126,3 +126,37 @@ export function planImport(rows, sections) {
   }
   return { got, keys, skipped: Object.keys(skipped), bad };
 }
+
+// ---------------------------------------------------------------- hide / restore sections
+// "Deleting" a section hides it everywhere in the app but never erases its learners or
+// scores, so "Add section" can bring it back exactly as it was.
+
+const SAFE_KEY = /^[a-z0-9-]+$/;
+
+/** Keep only known, unique, CSS-safe keys. */
+export function sanitizeHidden(list, allKeys) {
+  const known = new Set(allKeys);
+  return [...new Set(Array.isArray(list) ? list : [])].filter((k) => known.has(k) && SAFE_KEY.test(k));
+}
+
+export const visibleKeys = (allKeys, hidden) => allKeys.filter((k) => !hidden.includes(k));
+
+/** The last visible section can never be deleted. */
+export const canHide = (allKeys, hidden, key) =>
+  !hidden.includes(key) && visibleKeys(allKeys, hidden).length > 1;
+
+export const hideKey = (hidden, key) => (hidden.includes(key) ? hidden : [...hidden, key]);
+export const showKey = (hidden, key) => hidden.filter((k) => k !== key);
+
+/** CSS that hides every tab button, panel, option and score block belonging to the given sections. */
+export function visibilityCSS(hidden) {
+  return hidden
+    .filter((k) => SAFE_KEY.test(k))
+    .map((k) => [
+      `button[onclick*="showSubjectTab('${k}'"]`,
+      `#${k}-section`,
+      `option[value="${k}"]`,
+      `.qg-section[data-sec="${k}"]`,
+    ].join(',') + '{display:none!important}')
+    .join('\n');
+}
