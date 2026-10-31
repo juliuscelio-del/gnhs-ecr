@@ -9,13 +9,10 @@ permissions:
   contents: write
 
 env:
-  REACT_DIR: react-shell
+  REACT_DIR: ecr-react
   VERSION: 1.0.${{ github.run_number }}
 
 jobs:
-  # --------------------------------------------------
-  # 1. Build the new Vite React app
-  # --------------------------------------------------
   build-react:
     runs-on: ubuntu-latest
     steps:
@@ -24,9 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # Remove cache-dependency-path until package-lock.json exists
-          # cache: npm
-          # cache-dependency-path: react-shell/package-lock.json
 
       - name: Install & build React app
         working-directory: ${{ env.REACT_DIR }}
@@ -38,12 +32,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: react-dist
-          path: react-shell/dist
+          path: ecr-react/dist
           if-no-files-found: error
 
-  # --------------------------------------------------
-  # 2. Fast online update
-  # --------------------------------------------------
   publish-html:
     needs: build-react
     runs-on: ubuntu-latest
@@ -69,9 +60,6 @@ jobs:
           files: ecr-app.zip
           generate_release_notes: true
 
-  # --------------------------------------------------
-  # 3. Build Windows & Mac Electron installers
-  # --------------------------------------------------
   build:
     needs: build-react
     strategy:
@@ -99,11 +87,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p ecr/www ecr/build
-
-          # Copy the entire Vite build into the Electron www folder
           cp -r react-dist/* ecr/www/
 
-          # App icons
           for ICON in icon.icns icon.ico icon.png; do
             if [ -f "build/$ICON" ]; then
               cp "build/$ICON" "ecr/build/$ICON"
@@ -111,7 +96,6 @@ jobs:
               cp "$ICON" "ecr/build/$ICON"
             fi
           done
-          ls -la ecr/build
 
           cat > ecr/package.json <<EOF
           {
@@ -236,9 +220,6 @@ jobs:
             ecr/dist/GNHS-ECR-Mac-*.dmg
           if-no-files-found: error
 
-  # --------------------------------------------------
-  # 4. Attach installers to the GitHub Release
-  # --------------------------------------------------
   release:
     needs: [build, publish-html]
     runs-on: ubuntu-latest
