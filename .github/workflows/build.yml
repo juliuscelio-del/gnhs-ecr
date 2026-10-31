@@ -9,41 +9,45 @@ permissions:
   contents: write
 
 env:
-  REACT_DIR: ecr-react
   VERSION: 1.0.${{ github.run_number }}
 
 jobs:
-  build-react:
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install & build React app
-        working-directory: ${{ env.REACT_DIR }}
+      - name: Use the original single-file app as the web content
         run: |
-          npm install
-          npm run build
+          mkdir -p www
+          python3 - <<'PY'
+          import os
+          html = open('ElectronicClassRecordFINAL.html', encoding='utf-8').read()
+          snip = open('ecr-update-snippet.html', encoding='utf-8').read().replace('__ECR_VERSION__', os.environ['VERSION'])
+          i = html.rfind('</body>')
+          if i < 0:
+              raise SystemExit('No </body> tag found in the HTML file')
+          open('www/index.html', 'w', encoding='utf-8').write(html[:i] + snip + '
+' + html[i:])
+          PY
+          ls -lh www
 
-      - name: Upload built React app
+      - name: Upload app content
         uses: actions/upload-artifact@v4
         with:
-          name: react-dist
-          path: ecr-react/dist
+          name: app-www
+          path: www
           if-no-files-found: error
 
   publish-html:
-    needs: build-react
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: react-dist
+          name: app-www
           path: dist
 
       - name: Prepare update package
@@ -61,7 +65,7 @@ jobs:
           generate_release_notes: true
 
   build:
-    needs: build-react
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -80,14 +84,14 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: react-dist
-          path: react-dist
+          name: app-www
+          path: app-www
 
       - name: Package the app (Electron + React dist)
         shell: bash
         run: |
           mkdir -p ecr/www ecr/build
-          cp -r react-dist/* ecr/www/
+          cp -r app-www/* ecr/www/
 
           for ICON in icon.icns icon.ico icon.png; do
             if [ -f "build/$ICON" ]; then
